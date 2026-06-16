@@ -1,0 +1,99 @@
+from fastapi import APIRouter, HTTPException, Header, Depends
+from typing import Optional
+from datetime import datetime
+from bson import ObjectId
+import database as db
+from models.staff import StaffCreate, StaffOut
+
+router = APIRouter()
+
+
+# ── Simple staff-only access control (spec: "basic access control") ───────────
+def require_staff(x_staff_id: Optional[str] = Header(None)):
+    """
+    Basic access control for staff-only endpoints.
+    Clients must send X-Staff-Id header with a valid staff member id.
+    PLACEHOLDER: replace with proper JWT auth when the team agrees on auth strategy.
+    """
+    if not x_staff_id:
+        raise HTTPException(status_code=401, detail="X-Staff-Id header required for staff endpoints.")
+    staff = db.staff_members.find_one({"_id": ObjectId(x_staff_id)})
+    if not staff:
+        raise HTTPException(status_code=403, detail="Staff member not found.")
+    return staff
+
+
+def _serialize(doc: dict) -> dict:
+    doc["id"] = str(doc.pop("_id"))
+    return doc
+
+
+# ── POST /staff/ ──────────────────────────────────────────────────────────────
+@router.post("/staff/", response_model=dict, status_code=201)
+def create_staff(body: StaffCreate):
+    """
+    Create a surveyor or registrar staff account.
+    staff_code must be unique (enforced by DB index).
+    """
+    existing = db.staff_members.find_one({"staff_code": body.staff_code})
+    if existing:
+        raise HTTPException(status_code=409, detail=f"staff_code '{body.staff_code}' already exists.")
+
+    doc = body.model_dump()
+    doc["created_at"] = datetime.utcnow()
+
+    result = db.staff_members.insert_one(doc)
+    doc["id"] = str(result.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
+
+# ── GET /staff/{staff_id} ─────────────────────────────────────────────────────
+@router.get("/staff/{staff_id}", response_model=dict)
+def get_staff(staff_id: str):
+    """
+    Retrieve staff profile, current workload, and performance summary.
+    Includes active survey tasks count and completed tasks count.
+    """
+    try:
+        oid = ObjectId(staff_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid staff_id format.")
+
+    staff = db.staff_members.find_one({"_id": oid})
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff member not found.")
+
+    staff = _serialize(staff)
+
+    # Workload: count active survey tasks assigned to this staff member
+    active_tasks = db.survey_tasks.count_documents({
+        "assigned_surveyor_id": staff_id,
+        "status": {"$nin": ["survey_completed", "report_uploaded", "registrar_reviewed"]}
+    })
+    completed_tasks = db.survey_tasks.count_documents({
+        "assigned_surveyor_id": staff_id,
+        "status": {"$in": ["survey_completed", "report_uploaded", "registrar_reviewed"]}
+    })
+
+    staff["performance_summary"] = {
+        "active_tasks":    active_tasks,
+        "completed_tasks": completed_tasks,
+        "max_tasks":       staff.get("workload", {}).get("max_tasks", 10),
+    }
+
+    return staff
+
+
+# ── GET /staff/ ───────────────────────────────────────────────────────────────
+@router.get("/staff/", response_model=list)
+def list_staff(role: Optional[str] = None, zone: Optional[str] = None, active: bool = True):
+    """List all staff members, optionally filtered by role, zone, or active status."""
+    query: dict = {"active": active}
+    if role:
+        query["role"] = role
+    if zone:
+        query["coverage.zone_ids"] = zone
+
+    staff_list = list(db.staff_members.find(query))
+    return [_serialize(s) for s in staff_list]
