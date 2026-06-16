@@ -308,6 +308,84 @@ def list_surveyor_tasks(surveyor_id: str, status: Optional[str] = None):
     return [_serialize(t) for t in tasks]
 
 
+# ── PATCH /applications/{application_id}/reassign-surveyor ───────────────────
+@router.patch("/applications/{application_id}/reassign-surveyor", response_model=dict)
+def reassign_surveyor(application_id: str, new_surveyor_id: str, reason: str = "manual reassignment"):
+    """
+    Manually reassign a survey task to a different surveyor.
+    Spec: "Support manual reassignment".
+    Decrements old surveyor's workload, increments new surveyor's workload.
+    """
+    task = db.survey_tasks.find_one({"application_id": application_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="No survey task found for this application.")
+
+    if task["status"] == SurveyMilestoneType.registrar_reviewed:
+        raise HTTPException(status_code=400, detail="Cannot reassign — task is already fully reviewed.")
+
+    try:
+        new_oid = ObjectId(new_surveyor_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid new_surveyor_id format.")
+
+    new_surveyor = db.staff_members.find_one({"_id": new_oid, "role": "surveyor", "active": True})
+    if not new_surveyor:
+        raise HTTPException(status_code=404, detail="New surveyor not found or not an active surveyor.")
+
+    old_surveyor_id = task.get("assigned_surveyor_id")
+
+    # Adjust workload counters
+    if old_surveyor_id and old_surveyor_id != new_surveyor_id:
+        try:
+            db.staff_members.update_one(
+                {"_id": ObjectId(old_surveyor_id)},
+                {"$inc": {"workload.active_tasks": -1}}
+            )
+        except Exception:
+            pass  # Old surveyor may have been deleted
+
+    db.staff_members.update_one(
+        {"_id": new_oid},
+        {"$inc": {"workload.active_tasks": 1}}
+    )
+
+    # Record a milestone note about reassignment
+    reassignment_note = {
+        "type": task["status"],  # Stay on same milestone — just change who's responsible
+        "at": datetime.utcnow(),
+        "by": "admin",
+        "meta": {
+            "event": "manual_reassignment",
+            "from_surveyor": old_surveyor_id,
+            "to_surveyor": new_surveyor_id,
+            "reason": reason,
+        },
+    }
+
+    db.survey_tasks.update_one(
+        {"application_id": application_id},
+        {
+            "$set":  {"assigned_surveyor_id": new_surveyor_id},
+            "$push": {"field_notes": {
+                "note":     f"Reassigned to {new_surveyor.get('name', new_surveyor_id)}. Reason: {reason}",
+                "added_by": "system",
+                "added_at": datetime.utcnow(),
+            }},
+        }
+    )
+
+    _log_event(
+        application_id=application_id,
+        event_type="survey_reassigned",
+        actor_type="admin",
+        actor_id="manual",
+        meta={"from": old_surveyor_id, "to": new_surveyor_id, "reason": reason},
+    )
+
+    updated = db.survey_tasks.find_one({"application_id": application_id})
+    return _serialize(updated)
+
+
 # ── POST /survey-tasks/{task_id}/field-notes ─────────────────────────────────
 @router.post("/survey-tasks/{task_id}/field-notes", response_model=dict)
 def add_field_note(task_id: str, body: FieldNoteRequest):

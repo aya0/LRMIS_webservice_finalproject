@@ -47,6 +47,8 @@ class StaffCreate(BaseModel):
     name:        str
     role:        StaffRole
     department:  str
+    password:    str                   = Field(..., min_length=4, examples=["pass1234"],
+                                               description="Plain-text password — hashed before storage.")
     skills:      List[str]             = []
     coverage:    Coverage              = Coverage()
     schedule:    Schedule              = Schedule(shifts=[])
@@ -55,10 +57,26 @@ class StaffCreate(BaseModel):
     active:      bool                  = True
 
 
-# ── Full staff document returned from DB ─────────────────────────────────────
-class StaffOut(StaffCreate):
-    id:         str
-    created_at: datetime
+# ── Full staff document returned from DB (password_hash never exposed) ────────
+class StaffOut(BaseModel):
+    id:          str
+    staff_code:  str
+    name:        str
+    role:        StaffRole
+    department:  str
+    skills:      List[str]
+    coverage:    Coverage
+    schedule:    Schedule
+    workload:    Workload
+    contacts:    StaffContacts
+    active:      bool
+    created_at:  datetime
 
     class Config:
         populate_by_name = True
+
+
+# ── Login request ─────────────────────────────────────────────────────────────
+class LoginRequest(BaseModel):
+    staff_code: str = Field(..., examples=["SURV-RM-04"])
+    password:   str = Field(..., examples=["pass1234"])

@@ -1,7 +1,31 @@
-# LRMIS — Module 3: Surveyors, Registrar & Assignment
+# LRMIS — Land Registration Management Information System
 
-Land Registration Management Information System  
-COMP4382 Final Project — Student 3 Module
+COMP4382 Final Project — 2025/2026
+
+---
+
+## Team & Module Ownership
+
+| Module | Student | ID | Responsibility |
+|--------|---------|-----|----------------|
+| Module 1 — Land Application Management | [STUDENT 1 NAME] | [ID] | Applications, workflow state machine, parcels, certificates |
+| Module 2 — Applicant Portal | [STUDENT 2 NAME] | [ID] | Applicant profiles, document upload, objections, status tracking |
+| **Module 3 — Surveyors, Registrar & Assignment** | **Tala** | **1220536** | Staff management, auto-assignment engine, survey milestones, registrar review |
+| Module 4 — Analytics & Map | All three students | — | Dashboards, live map, geospatial queries, aggregation pipelines |
+
+---
+
+## This Repository — Module 3
+
+This module is responsible for everything between `survey_required` and `legal_review` in the application workflow:
+
+- Creating and managing surveyor and registrar staff accounts
+- Automatically assigning surveyors based on zone, availability, workload, skills, and priority
+- Tracking field survey milestones step by step
+- Uploading survey report metadata
+- Registrar review and decision recording
+
+All integration points with other modules are marked `# PLACEHOLDER` in the code.
 
 ---
 

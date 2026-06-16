@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getSurveyTask, addMilestone, uploadSurveyReport, addFieldNote } from '../api/api'
+import { useAuth } from '../context/AuthContext'
 
 const MILESTONE_ORDER = [
   'assigned',
@@ -26,12 +27,11 @@ const MILESTONE_LABELS = {
   registrar_reviewed: 'Registrar Reviewed',
 }
 
-// PLACEHOLDER: Replace with real actor id from auth context
-const DEMO_ACTOR = 'PLACEHOLDER_SURVEYOR_ID'
-
 export default function TaskExecution() {
-  const { taskId } = useParams()
-  const navigate   = useNavigate()
+  const { taskId }  = useParams()
+  const navigate    = useNavigate()
+  const { staff }   = useAuth()
+  const ACTOR_ID    = staff?.id ?? 'unknown'
 
   const [task,         setTask]         = useState(null)
   const [loading,      setLoading]      = useState(true)
@@ -80,7 +80,7 @@ export default function TaskExecution() {
     try {
       const body = {
         milestone,
-        by:   DEMO_ACTOR,
+        by:   ACTOR_ID,
         meta: {},
       }
       if (milestone === 'visit_scheduled' && scheduledDate) {
@@ -105,7 +105,7 @@ export default function TaskExecution() {
         ...reportForm,
         application_id: task.application_id,
         task_id:        taskId,
-        surveyor_id:    DEMO_ACTOR,
+        surveyor_id:    ACTOR_ID,
         area_sqm:       reportForm.area_sqm ? parseFloat(reportForm.area_sqm) : null,
       })
       alert('Report uploaded successfully.')
@@ -122,7 +122,7 @@ export default function TaskExecution() {
     if (!noteText.trim()) return
     setSubmitting(true)
     try {
-      await addFieldNote(taskId, { note: noteText, added_by: DEMO_ACTOR })
+      await addFieldNote(taskId, { note: noteText, added_by: ACTOR_ID })
       setNoteText('')
       loadTask()
     } catch (e) {

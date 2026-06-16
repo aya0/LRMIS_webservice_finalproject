@@ -1,127 +1,165 @@
 /**
  * Live Parcel Map — Spec: Student 3 UI
  * Shows: parcel boundaries, pending apps, survey-required apps, disputed parcels,
- *        marker clustering, filters by zone / type / status.
- * Uses: OpenStreetMap + Leaflet (react-leaflet)
- *
- * PLACEHOLDER: parcel GeoJSON and pending heatmap come from Group module analytics endpoints.
- * Until those are ready, the map loads whatever data is available and shows a placeholder notice.
+ *        marker clustering, filters by zone / type / status
+ * Uses: OpenStreetMap + Leaflet (react-leaflet) + leaflet.markercluster
+ * PLACEHOLDER: parcel GeoJSON and heatmap from Group module analytics endpoints
  */
-import { useEffect, useState, useRef } from 'react'
-import { MapContainer, TileLayer, GeoJSON, Marker, Popup, useMap } from 'react-leaflet'
+import { useEffect, useRef, useState } from 'react'
+import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { getParcelGeoFeed, getPendingHeatmap } from '../api/api'
 
-// Fix Leaflet default icon path issue with Vite
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon   from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 
 delete L.Icon.Default.prototype._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl:       markerIcon,
-  shadowUrl:     markerShadow,
-})
+L.Icon.Default.mergeOptions({ iconRetinaUrl: markerIcon2x, iconUrl: markerIcon, shadowUrl: markerShadow })
 
 const STATUS_COLORS = {
-  pending:          '#f59e0b',
-  survey_required:  '#3b82f6',
-  disputed:         '#ef4444',
-  registered:       '#10b981',
-  default:          '#6b7280',
+  pending:         '#f59e0b',
+  survey_required: '#3b82f6',
+  disputed:        '#ef4444',
+  registered:      '#10b981',
+  default:         '#94a3b8',
 }
 
-function statusColor(status) {
-  return STATUS_COLORS[status] ?? STATUS_COLORS.default
-}
+const LEGEND = [
+  { label: 'Registered',      color: '#10b981' },
+  { label: 'Pending',         color: '#f59e0b' },
+  { label: 'Survey Required', color: '#3b82f6' },
+  { label: 'Disputed',        color: '#ef4444' },
+]
 
-function parcelStyle(feature) {
-  const status = feature?.properties?.registration_status ?? 'default'
-  const dispute = feature?.properties?.dispute_state
-  return {
-    color:       dispute && dispute !== 'none' ? STATUS_COLORS.disputed : statusColor(status),
-    weight:      2,
-    opacity:     0.9,
-    fillOpacity: 0.25,
-  }
-}
-
-// Default map center — Ramallah (matches sample data in spec)
 const DEFAULT_CENTER = [31.905, 35.206]
 
-export default function LiveMap() {
-  const [parcels,     setParcels]     = useState(null)
-  const [pending,     setPending]     = useState(null)
-  const [loadingMsg,  setLoadingMsg]  = useState('Loading map data…')
+function parcelStyle(feature) {
+  const dispute = feature?.properties?.dispute_state
+  const status  = feature?.properties?.registration_status ?? 'default'
+  const color   = dispute && dispute !== 'none'
+    ? STATUS_COLORS.disputed
+    : (STATUS_COLORS[status] ?? STATUS_COLORS.default)
+  return { color, weight: 2, opacity: 0.9, fillOpacity: 0.2, fillColor: color }
+}
 
-  // Filters (spec: filter by zone, type, status)
+function onEachParcel(feature, layer) {
+  const p = feature.properties ?? {}
+  layer.bindPopup(`
+    <div style="font-family:Inter,sans-serif;min-width:180px">
+      <p style="font-weight:700;font-size:13px;margin:0 0 6px">Parcel ${p.parcel_number ?? '—'}</p>
+      <table style="font-size:11px;border-collapse:collapse;width:100%">
+        <tr><td style="color:#94a3b8;padding:2px 0">Block</td><td style="font-weight:600">${p.block_number ?? '—'}</td></tr>
+        <tr><td style="color:#94a3b8;padding:2px 0">Basin</td><td style="font-weight:600">${p.basin_number ?? '—'}</td></tr>
+        <tr><td style="color:#94a3b8;padding:2px 0">Zone</td><td style="font-weight:600">${p.zone_id ?? '—'}</td></tr>
+        <tr><td style="color:#94a3b8;padding:2px 0">Status</td><td style="font-weight:600">${p.registration_status ?? '—'}</td></tr>
+        <tr><td style="color:#94a3b8;padding:2px 0">Dispute</td><td style="font-weight:600">${p.dispute_state ?? 'none'}</td></tr>
+        <tr><td style="color:#94a3b8;padding:2px 0">Area</td><td style="font-weight:600">${p.area_sqm ? p.area_sqm + ' sqm' : '—'}</td></tr>
+      </table>
+    </div>
+  `)
+}
+
+/**
+ * MarkerClusterLayer — wraps leaflet.markercluster for react-leaflet.
+ * Spec: "Use marker clustering" for pending application markers.
+ */
+function MarkerClusterLayer({ features }) {
+  const map        = useMap()
+  const clusterRef = useRef(null)
+
+  useEffect(() => {
+    if (clusterRef.current) {
+      map.removeLayer(clusterRef.current)
+    }
+
+    const cluster = L.markerClusterGroup({ maxClusterRadius: 60 })
+    clusterRef.current = cluster
+
+    features.forEach(f => {
+      const [lng, lat] = f.geometry?.coordinates ?? []
+      if (!lat || !lng) return
+      const marker = L.marker([lat, lng])
+      marker.bindPopup(`
+        <div style="font-family:Inter,sans-serif;font-size:12px">
+          <strong>Pending Application</strong><br/>
+          Zone: ${f.properties?.zone_id ?? '—'}<br/>
+          Status: ${f.properties?.status ?? '—'}
+        </div>
+      `)
+      cluster.addLayer(marker)
+    })
+
+    map.addLayer(cluster)
+
+    return () => {
+      map.removeLayer(cluster)
+    }
+  }, [map, features])
+
+  return null
+}
+
+export default function LiveMap() {
+  const [parcels,      setParcels]      = useState(null)
+  const [pending,      setPending]      = useState(null)
+  const [notice,       setNotice]       = useState(null)
   const [zoneFilter,   setZoneFilter]   = useState('')
   const [typeFilter,   setTypeFilter]   = useState('')
   const [statusFilter, setStatusFilter] = useState('')
 
   useEffect(() => {
     Promise.all([getParcelGeoFeed(), getPendingHeatmap()])
-      .then(([parcelRes, pendingRes]) => {
-        setParcels(parcelRes.data)
-        setPending(pendingRes.data)
-        setLoadingMsg(null)
-      })
-      .catch(() => {
-        setLoadingMsg(
-          'PLACEHOLDER: Analytics endpoints (Group module) not yet available. ' +
-          'Map will populate once Student 1 & Group module analytics are running.'
-        )
-      })
+      .then(([p, h]) => { setParcels(p.data); setPending(h.data) })
+      .catch(() => setNotice('Parcel and heatmap data will load once the Group analytics module is running.'))
   }, [])
 
-  // Filter GeoJSON features client-side
   function filterFeatures(geojson) {
     if (!geojson?.features) return geojson
-    const filtered = geojson.features.filter(f => {
-      const props = f.properties ?? {}
-      if (zoneFilter   && props.zone_id          !== zoneFilter)   return false
-      if (typeFilter   && props.application_type !== typeFilter)    return false
-      if (statusFilter && props.registration_status !== statusFilter) return false
-      return true
-    })
-    return { ...geojson, features: filtered }
+    return {
+      ...geojson,
+      features: geojson.features.filter(f => {
+        const p = f.properties ?? {}
+        if (zoneFilter   && p.zone_id             !== zoneFilter)   return false
+        if (typeFilter   && p.application_type    !== typeFilter)    return false
+        if (statusFilter && p.registration_status !== statusFilter)  return false
+        return true
+      })
+    }
   }
 
-  function onEachParcel(feature, layer) {
-    const p = feature.properties ?? {}
-    layer.bindPopup(`
-      <strong>Parcel ${p.parcel_number ?? '—'}</strong><br/>
-      Block: ${p.block_number ?? '—'} | Basin: ${p.basin_number ?? '—'}<br/>
-      Zone: ${p.zone_id ?? '—'}<br/>
-      Status: ${p.registration_status ?? '—'}<br/>
-      Dispute: ${p.dispute_state ?? 'none'}<br/>
-      Area: ${p.area_sqm ? p.area_sqm + ' sqm' : '—'}
-    `)
-  }
+  const pendingFeatures = pending?.features ?? []
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-gray-800">Live Parcel Map</h1>
+    <div>
+      {/* Header */}
+      <div className="mb-6">
+        <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest mb-1">Geospatial</p>
+        <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Live Parcel Map</h1>
+        <p className="text-slate-400 text-sm mt-1">Real-time view of parcels, applications, and survey tasks</p>
+      </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 bg-white rounded-xl shadow p-4 border border-gray-100">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-6 py-4 flex flex-wrap items-end gap-6 mb-5">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Zone</label>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Zone</label>
           <input
             value={zoneFilter}
             onChange={e => setZoneFilter(e.target.value)}
             placeholder="e.g. ZONE-RM-01"
-            className="border border-gray-300 rounded px-3 py-1 text-sm w-40"
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Application Type</label>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Application Type</label>
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value)}
-            className="border border-gray-300 rounded px-3 py-1 text-sm"
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Types</option>
             <option value="first_registration">First Registration</option>
@@ -133,11 +171,11 @@ export default function LiveMap() {
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Status</label>
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="border border-gray-300 rounded px-3 py-1 text-sm"
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Statuses</option>
             <option value="submitted">Submitted</option>
@@ -150,34 +188,38 @@ export default function LiveMap() {
             <option value="closed">Closed</option>
           </select>
         </div>
+
+        {/* Legend */}
+        <div className="ml-auto flex items-center gap-4">
+          {LEGEND.map(({ label, color }) => (
+            <div key={label} className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full border-2" style={{ backgroundColor: color + '40', borderColor: color }} />
+              <span className="text-xs text-slate-500">{label}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-xs">
-        {Object.entries(STATUS_COLORS).filter(([k]) => k !== 'default').map(([status, color]) => (
-          <span key={status} className="flex items-center gap-1">
-            <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-            {status.replace(/_/g, ' ')}
-          </span>
-        ))}
-      </div>
-
-      {/* PLACEHOLDER notice */}
-      {loadingMsg && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg px-4 py-3 text-sm">
-          ⚠ {loadingMsg}
+      {/* Placeholder notice */}
+      {notice && (
+        <div className="bg-amber-50 border border-amber-100 rounded-xl px-5 py-3 flex items-center gap-3 mb-4">
+          <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <p className="text-xs text-amber-700 font-medium">{notice}</p>
         </div>
       )}
 
       {/* Map */}
-      <div className="rounded-xl overflow-hidden shadow border border-gray-200" style={{ height: '60vh' }}>
+      <div className="rounded-2xl overflow-hidden shadow-sm border border-slate-100" style={{ height: '62vh' }}>
         <MapContainer center={DEFAULT_CENTER} zoom={13} style={{ height: '100%', width: '100%' }}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* Parcel boundaries — spec: show parcel boundaries */}
+          {/* Parcel boundary polygons — GeoJSON from Student 1's parcels collection */}
           {parcels && (
             <GeoJSON
               key={JSON.stringify({ zoneFilter, typeFilter, statusFilter })}
@@ -187,26 +229,15 @@ export default function LiveMap() {
             />
           )}
 
-          {/* Pending heatmap points — spec: show pending applications */}
-          {pending?.features?.map((f, i) => {
-            const [lng, lat] = f.geometry?.coordinates ?? []
-            if (!lat || !lng) return null
-            return (
-              <Marker key={i} position={[lat, lng]}>
-                <Popup>
-                  <strong>Pending Application</strong><br />
-                  Zone: {f.properties?.zone_id ?? '—'}<br />
-                  Status: {f.properties?.status ?? '—'}
-                </Popup>
-              </Marker>
-            )
-          })}
+          {/* Clustered pending application markers — spec: "use marker clustering" */}
+          {pendingFeatures.length > 0 && (
+            <MarkerClusterLayer features={pendingFeatures} />
+          )}
         </MapContainer>
       </div>
 
-      <p className="text-xs text-gray-400">
-        Map uses OpenStreetMap + Leaflet. Parcel data and pending application markers load from
-        the Group analytics module endpoints once available.
+      <p className="text-xs text-slate-300 mt-3 text-center">
+        OpenStreetMap · Leaflet · Clustered markers via leaflet.markercluster · Parcel data from Group module
       </p>
     </div>
   )

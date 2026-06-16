@@ -2,18 +2,39 @@ import axios from 'axios'
 
 const api = axios.create({ baseURL: '/api' })
 
+/**
+ * Request interceptor — attaches X-Staff-Id header from the logged-in staff
+ * stored in localStorage. Satisfies spec: "basic access control for staff-only endpoints."
+ */
+api.interceptors.request.use(config => {
+  try {
+    const saved = localStorage.getItem('lrmis_staff')
+    if (saved) {
+      const staff = JSON.parse(saved)
+      if (staff?.id) config.headers['X-Staff-Id'] = staff.id
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return config
+})
+
 // ── Staff ─────────────────────────────────────────────────────────────────────
-export const createStaff   = (data)     => api.post('/staff/', data)
-export const getStaff      = (id)       => api.get(`/staff/${id}`)
-export const listStaff     = (params)   => api.get('/staff/', { params })
+export const createStaff  = (data)   => api.post('/staff/', data)
+export const getStaff     = (id)     => api.get(`/staff/${id}`)
+export const listStaff    = (params) => api.get('/staff/', { params })
 
 // ── Survey tasks ──────────────────────────────────────────────────────────────
-export const getSurveyTask    = (appId)         => api.get(`/applications/${appId}/survey-task`)
+export const getSurveyTask     = (appId)              => api.get(`/applications/${appId}/survey-task`)
 export const listSurveyorTasks = (surveyorId, status) =>
   api.get('/survey-tasks/', { params: { surveyor_id: surveyorId, status } })
 
 // ── Assignment ────────────────────────────────────────────────────────────────
-export const autoAssign = (appId) => api.post(`/applications/${appId}/auto-assign-surveyor`)
+export const autoAssign      = (appId)                 => api.post(`/applications/${appId}/auto-assign-surveyor`)
+export const reassignSurveyor = (appId, newSurveyorId, reason) =>
+  api.patch(`/applications/${appId}/reassign-surveyor`, null, {
+    params: { new_surveyor_id: newSurveyorId, reason }
+  })
 
 // ── Milestones ────────────────────────────────────────────────────────────────
 export const addMilestone = (appId, data) =>
@@ -32,8 +53,7 @@ export const addFieldNote = (taskId, data) =>
   api.post(`/survey-tasks/${taskId}/field-notes`, data)
 
 // ── PLACEHOLDER: Analytics endpoints (Group module — Student 3 UI needs these)
-// These will be implemented by the group. Stubs return empty data for now.
-export const getKPIs              = () => api.get('/analytics/kpis').catch(() => ({ data: {} }))
+export const getKPIs                 = () => api.get('/analytics/kpis').catch(() => ({ data: {} }))
 export const getApplicationsByStatus = () => api.get('/analytics/applications-by-status').catch(() => ({ data: [] }))
 export const getApplicationsByZone   = () => api.get('/analytics/applications-by-zone').catch(() => ({ data: [] }))
 export const getProcessingTime       = () => api.get('/analytics/processing-time').catch(() => ({ data: [] }))

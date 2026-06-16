@@ -1,64 +1,70 @@
 /**
  * Analytics Dashboard — Spec: Student 3 UI
- * Shows:
- *   - Applications over time
- *   - Pending applications by zone
- *   - Average processing time
- *   - Surveyor workload
- *   - Applications under objection
- *   - Certificates issued per month
- *
- * Data comes from Group module analytics endpoints (GET /analytics/*).
- * PLACEHOLDER notices shown until those endpoints are live.
+ * Shows: applications over time, pending by zone, avg processing time,
+ *        surveyor workload, applications under objection, certs per month
+ * PLACEHOLDER: data from Group module analytics endpoints
  */
 import { useEffect, useState } from 'react'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
+  Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import {
   getKPIs, getApplicationsByStatus, getApplicationsByZone,
   getProcessingTime, getSurveyorAnalytics
 } from '../api/api'
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
-
-function KPICard({ label, value, sub, color = 'blue' }) {
-  const bg = {
-    blue:   'bg-blue-50 border-blue-200 text-blue-700',
-    green:  'bg-green-50 border-green-200 text-green-700',
-    orange: 'bg-orange-50 border-orange-200 text-orange-700',
-    red:    'bg-red-50 border-red-200 text-red-700',
-    purple: 'bg-purple-50 border-purple-200 text-purple-700',
-  }
+function KPICard({ label, value, icon, accent = '#2563eb' }) {
   return (
-    <div className={`rounded-xl border p-5 ${bg[color] ?? bg.blue}`}>
-      <p className="text-sm font-medium opacity-80">{label}</p>
-      <p className="text-3xl font-bold mt-1">{value ?? '—'}</p>
-      {sub && <p className="text-xs mt-1 opacity-60">{sub}</p>}
-    </div>
-  )
-}
-
-function PlaceholderChart({ title }) {
-  return (
-    <div className="bg-white rounded-xl shadow border border-gray-100 p-6">
-      <h3 className="font-semibold text-gray-700 mb-3">{title}</h3>
-      <div className="h-48 bg-gray-50 rounded flex items-center justify-center text-sm text-gray-400 border border-dashed border-gray-300">
-        PLACEHOLDER — awaiting Group module analytics endpoint
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-5 flex items-start gap-4">
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+           style={{ backgroundColor: accent + '15' }}>
+        <span style={{ color: accent }} className="text-lg">{icon}</span>
+      </div>
+      <div>
+        <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">{label}</p>
+        <p className="text-2xl font-bold text-slate-800 mt-0.5">{value ?? '—'}</p>
       </div>
     </div>
   )
 }
 
+function ChartCard({ title, subtitle, children }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+      <div className="mb-5">
+        <h3 className="font-semibold text-slate-800">{title}</h3>
+        {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function PlaceholderChart({ title, subtitle }) {
+  return (
+    <ChartCard title={title} subtitle={subtitle}>
+      <div className="h-52 bg-slate-50 rounded-xl flex flex-col items-center justify-center border border-dashed border-slate-200">
+        <svg className="w-8 h-8 text-slate-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        <p className="text-xs text-slate-400 font-medium">Awaiting analytics endpoint</p>
+        <p className="text-xs text-slate-300 mt-0.5">Group module — GET /analytics/*</p>
+      </div>
+    </ChartCard>
+  )
+}
+
+const CHART_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+
 export default function Analytics() {
-  const [kpis,        setKpis]        = useState({})
-  const [byStatus,    setByStatus]    = useState([])
-  const [byZone,      setByZone]      = useState([])
-  const [procTime,    setProcTime]    = useState([])
-  const [surveyors,   setSurveyors]   = useState([])
-  const [loading,     setLoading]     = useState(true)
-  const [placeholder, setPlaceholder] = useState(false)
+  const [kpis,      setKpis]      = useState({})
+  const [byStatus,  setByStatus]  = useState([])
+  const [byZone,    setByZone]    = useState([])
+  const [procTime,  setProcTime]  = useState([])
+  const [surveyors, setSurveyors] = useState([])
+  const [loading,   setLoading]   = useState(true)
 
   useEffect(() => {
     Promise.all([
@@ -73,119 +79,116 @@ export default function Analytics() {
       setByZone(Array.isArray(z.data) ? z.data : [])
       setProcTime(Array.isArray(p.data) ? p.data : [])
       setSurveyors(Array.isArray(sv.data) ? sv.data : [])
-
-      // If all empty, show placeholder notice
-      const allEmpty = !k.data?.total_applications && !s.data?.length
-      setPlaceholder(allEmpty)
     }).finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <p className="text-gray-500">Loading analytics…</p>
-
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Analytics Dashboard</h1>
-
-      {placeholder && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg px-4 py-3 text-sm">
-          ⚠ PLACEHOLDER: Group module analytics endpoints not yet available.
-          KPI cards and charts will populate once GET /analytics/* endpoints are implemented.
-        </div>
-      )}
-
-      {/* KPI cards — spec: total apps, by status, pending, approved, rejected, objection, avg processing, surveyor workload, certs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        <KPICard label="Total Applications"       value={kpis.total_applications}         color="blue"   />
-        <KPICard label="Pending"                  value={kpis.pending_applications}        color="orange" />
-        <KPICard label="Approved"                 value={kpis.approved_applications}       color="green"  />
-        <KPICard label="Rejected"                 value={kpis.rejected_applications}       color="red"    />
-        <KPICard label="Under Objection"          value={kpis.applications_under_objection} color="red"   />
-        <KPICard label="Certificates Issued"      value={kpis.certificates_issued}         color="green"  />
-        <KPICard label="Avg Processing Time"      value={kpis.avg_processing_days ? `${kpis.avg_processing_days} days` : '—'} color="purple" />
-        <KPICard label="Surveyor Active Tasks"    value={kpis.surveyor_active_tasks}       color="blue"   />
+    <div>
+      {/* Header */}
+      <div className="mb-8">
+        <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest mb-1">Reporting</p>
+        <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Analytics Dashboard</h1>
+        <p className="text-slate-400 text-sm mt-1">System-wide KPIs and operational metrics</p>
       </div>
 
+      {/* Placeholder notice */}
+      <div className="bg-amber-50 border border-amber-100 rounded-xl px-5 py-3 flex items-center gap-3 mb-8">
+        <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <p className="text-xs text-amber-700 font-medium">
+          Analytics data will populate once the Group module implements <code className="bg-amber-100 px-1 rounded">GET /analytics/*</code> endpoints.
+        </p>
+      </div>
+
+      {/* KPI grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <KPICard label="Total Applications"    value={kpis.total_applications}          icon="📋" accent="#2563eb" />
+        <KPICard label="Pending"               value={kpis.pending_applications}         icon="⏳" accent="#f59e0b" />
+        <KPICard label="Approved"              value={kpis.approved_applications}        icon="✅" accent="#10b981" />
+        <KPICard label="Rejected"              value={kpis.rejected_applications}        icon="❌" accent="#ef4444" />
+        <KPICard label="Under Objection"       value={kpis.applications_under_objection} icon="⚠️" accent="#f59e0b" />
+        <KPICard label="Certificates Issued"   value={kpis.certificates_issued}          icon="🏛️" accent="#10b981" />
+        <KPICard label="Avg Processing Time"   value={kpis.avg_processing_days ? `${kpis.avg_processing_days}d` : null} icon="⏱️" accent="#8b5cf6" />
+        <KPICard label="Surveyor Active Tasks" value={kpis.surveyor_active_tasks}        icon="🗺️" accent="#2563eb" />
+      </div>
+
+      {/* Charts grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        {/* Applications over time — spec requirement */}
+        {/* Applications by status */}
         {byStatus.length > 0 ? (
-          <div className="bg-white rounded-xl shadow border border-gray-100 p-6">
-            <h3 className="font-semibold text-gray-700 mb-4">Applications by Status</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={byStatus}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="status" tick={{ fontSize: 11 }} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="count" fill="#3b82f6" radius={[4,4,0,0]} />
+          <ChartCard title="Applications by Status" subtitle="Current distribution across workflow states">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={byStatus} barSize={32}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="status" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }} />
+                <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartCard>
         ) : (
-          <PlaceholderChart title="Applications over time / by Status" />
+          <PlaceholderChart title="Applications over Time / by Status" subtitle="Group module endpoint required" />
         )}
 
-        {/* Pending by zone — spec requirement */}
+        {/* Pending by zone */}
         {byZone.length > 0 ? (
-          <div className="bg-white rounded-xl shadow border border-gray-100 p-6">
-            <h3 className="font-semibold text-gray-700 mb-4">Pending Applications by Zone</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={byZone} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis dataKey="zone_id" type="category" tick={{ fontSize: 11 }} width={100} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#f59e0b" radius={[0,4,4,0]} />
+          <ChartCard title="Pending Applications by Zone" subtitle="Geographic distribution of backlog">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={byZone} layout="vertical" barSize={20}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis dataKey="zone_id" type="category" tick={{ fontSize: 11, fill: '#94a3b8' }} width={90} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                <Bar dataKey="count" fill="#f59e0b" radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartCard>
         ) : (
-          <PlaceholderChart title="Pending Applications by Zone" />
+          <PlaceholderChart title="Pending Applications by Zone" subtitle="Group module endpoint required" />
         )}
 
-        {/* Average processing time — spec requirement */}
+        {/* Processing time */}
         {procTime.length > 0 ? (
-          <div className="bg-white rounded-xl shadow border border-gray-100 p-6">
-            <h3 className="font-semibold text-gray-700 mb-4">Average Processing Time by Type</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={procTime}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="application_type" tick={{ fontSize: 10 }} />
-                <YAxis unit=" d" />
-                <Tooltip />
-                <Bar dataKey="avg_days" fill="#8b5cf6" radius={[4,4,0,0]} />
+          <ChartCard title="Average Processing Time" subtitle="Days by application type">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={procTime} barSize={32}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="application_type" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis unit="d" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                <Bar dataKey="avg_days" fill="#8b5cf6" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartCard>
         ) : (
-          <PlaceholderChart title="Average Processing Time by Application Type" />
+          <PlaceholderChart title="Average Processing Time by Type" subtitle="Group module endpoint required" />
         )}
 
-        {/* Surveyor workload — spec requirement */}
+        {/* Surveyor workload */}
         {surveyors.length > 0 ? (
-          <div className="bg-white rounded-xl shadow border border-gray-100 p-6">
-            <h3 className="font-semibold text-gray-700 mb-4">Surveyor Workload</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={surveyors}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="active_tasks"    fill="#3b82f6" name="Active"    radius={[4,4,0,0]} />
-                <Bar dataKey="completed_tasks" fill="#10b981" name="Completed" radius={[4,4,0,0]} />
+          <ChartCard title="Surveyor Workload" subtitle="Active vs completed tasks per surveyor">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={surveyors} barSize={20}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="active_tasks"    name="Active"    fill="#2563eb" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="completed_tasks" name="Completed" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartCard>
         ) : (
-          <PlaceholderChart title="Surveyor Workload" />
+          <PlaceholderChart title="Surveyor Workload" subtitle="Group module endpoint required" />
         )}
 
-        {/* Applications under objection — spec requirement */}
-        <PlaceholderChart title="Applications under Objection over Time" />
-
-        {/* Certificates issued per month — spec requirement */}
-        <PlaceholderChart title="Certificates Issued per Month" />
+        <PlaceholderChart title="Applications under Objection over Time" subtitle="Group module endpoint required" />
+        <PlaceholderChart title="Certificates Issued per Month"          subtitle="Group module endpoint required" />
 
       </div>
     </div>

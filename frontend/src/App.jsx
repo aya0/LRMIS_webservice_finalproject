@@ -1,50 +1,166 @@
-import { Routes, Route, NavLink } from 'react-router-dom'
+import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import Login         from './pages/Login'
+import Home          from './pages/Home'
 import SurveyorTasks from './pages/SurveyorTasks'
 import TaskExecution  from './pages/TaskExecution'
 import LiveMap        from './pages/LiveMap'
 import Analytics      from './pages/Analytics'
 
 const NAV = [
-  { to: '/',         label: 'My Tasks'   },
-  { to: '/map',      label: 'Live Map'   },
-  { to: '/analytics',label: 'Analytics'  },
+  {
+    to: '/home',
+    label: 'Overview',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+    ),
+  },
+  {
+    to: '/',
+    label: 'My Tasks',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      </svg>
+    ),
+  },
+  {
+    to: '/map',
+    label: 'Live Map',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+      </svg>
+    ),
+  },
+  {
+    to: '/analytics',
+    label: 'Analytics',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+    ),
+  },
 ]
+
+function Shell() {
+  const { staff, logout } = useAuth()
+  const navigate          = useNavigate()
+
+  if (!staff) return <Navigate to="/login" replace />
+
+  return (
+    <div className="flex min-h-screen bg-slate-50">
+
+      {/* ── Sidebar ───────────────────────────────────────── */}
+      <aside className="w-64 bg-[#0f2044] flex flex-col fixed top-0 left-0 h-full z-10 shadow-2xl">
+
+        {/* Logo */}
+        <div className="px-6 py-7 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-500 flex items-center justify-center shadow-lg">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-bold text-sm tracking-wide">LRMIS</p>
+              <p className="text-blue-300 text-xs font-light">Land Registry</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Section label */}
+        <div className="px-6 pt-7 pb-2">
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+            Navigation
+          </p>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 px-3 space-y-1">
+          {NAV.map(({ to, label, icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50'
+                    : 'text-slate-400 hover:bg-white/8 hover:text-white'
+                }`
+              }
+            >
+              {icon}
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* Logged-in staff card */}
+        <div className="px-5 py-5 border-t border-white/10 space-y-2">
+          <div className="bg-white/5 rounded-xl px-4 py-3">
+            <p className="text-[11px] text-slate-400 truncate">{staff.name}</p>
+            <p className="text-[11px] text-blue-300 font-medium mt-0.5 capitalize">{staff.role} · {staff.staff_code}</p>
+          </div>
+          <button
+            onClick={() => { logout(); navigate('/login') }}
+            className="w-full text-[11px] text-slate-500 hover:text-red-400 transition-colors py-1"
+          >
+            Switch account
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main content ──────────────────────────────────── */}
+      <div className="flex-1 ml-64 flex flex-col min-h-screen">
+
+        {/* Top bar */}
+        <header className="bg-white border-b border-slate-100 px-10 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+          <div>
+            <p className="text-base font-semibold text-slate-800 tracking-tight">
+              Land Registration Management Information System
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5 font-light">COMP4382 · 2025–2026</p>
+          </div>
+          <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-full">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs text-emerald-700 font-medium">System Online</span>
+          </div>
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 px-10 py-8">
+          <Routes>
+            <Route path="/home"          element={<Home />} />
+            <Route path="/"              element={<SurveyorTasks />} />
+            <Route path="/tasks/:taskId" element={<TaskExecution />} />
+            <Route path="/map"           element={<LiveMap />} />
+            <Route path="/analytics"     element={<Analytics />} />
+            <Route path="*"              element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+      </div>
+    </div>
+  )
+}
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Top nav */}
-      <header className="bg-blue-800 text-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-8">
-          <span className="font-bold text-lg tracking-wide">LRMIS — Module 3</span>
-          <nav className="flex gap-4">
-            {NAV.map(({ to, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end
-                className={({ isActive }) =>
-                  `text-sm font-medium px-3 py-1 rounded transition ${
-                    isActive ? 'bg-white text-blue-800' : 'hover:bg-blue-700'
-                  }`
-                }
-              >
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-        </div>
-      </header>
-
-      {/* Page content */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6">
-        <Routes>
-          <Route path="/"              element={<SurveyorTasks />} />
-          <Route path="/tasks/:taskId" element={<TaskExecution />} />
-          <Route path="/map"           element={<LiveMap />} />
-          <Route path="/analytics"     element={<Analytics />} />
-        </Routes>
-      </main>
-    </div>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/*"     element={<Shell />} />
+      </Routes>
+    </AuthProvider>
   )
 }

@@ -17,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(staff.router, tags=["Staff"])
+app.include_router(staff.router,  tags=["Staff & Auth"])
 app.include_router(survey.router, tags=["Survey & Assignment"])
 
 

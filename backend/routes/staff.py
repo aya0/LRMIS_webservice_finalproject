@@ -2,8 +2,11 @@ from fastapi import APIRouter, HTTPException, Header, Depends
 from typing import Optional
 from datetime import datetime
 from bson import ObjectId
+from passlib.context import CryptContext
 import database as db
-from models.staff import StaffCreate, StaffOut
+from models.staff import StaffCreate, StaffOut, LoginRequest
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter()
 
@@ -25,6 +28,7 @@ def require_staff(x_staff_id: Optional[str] = Header(None)):
 
 def _serialize(doc: dict) -> dict:
     doc["id"] = str(doc.pop("_id"))
+    doc.pop("password_hash", None)   # Never expose the hash
     return doc
 
 
@@ -33,6 +37,7 @@ def _serialize(doc: dict) -> dict:
 def create_staff(body: StaffCreate):
     """
     Create a surveyor or registrar staff account.
+    Password is hashed with bcrypt before storage — never stored in plain text.
     staff_code must be unique (enforced by DB index).
     """
     existing = db.staff_members.find_one({"staff_code": body.staff_code})
@@ -40,12 +45,39 @@ def create_staff(body: StaffCreate):
         raise HTTPException(status_code=409, detail=f"staff_code '{body.staff_code}' already exists.")
 
     doc = body.model_dump()
+    # Hash password before storing — plain text is discarded
+    doc["password_hash"] = pwd_context.hash(doc.pop("password"))
     doc["created_at"] = datetime.utcnow()
 
     result = db.staff_members.insert_one(doc)
     doc["id"] = str(result.inserted_id)
     doc.pop("_id", None)
+    doc.pop("password_hash", None)   # Never return hash to client
     return doc
+
+
+# ── POST /auth/login ──────────────────────────────────────────────────────────
+@router.post("/auth/login", response_model=dict)
+def login(body: LoginRequest):
+    """
+    Authenticate a staff member by staff_code + password.
+    Returns the staff profile (no password_hash). The client stores
+    the staff id and sends it as X-Staff-Id on subsequent requests.
+    Spec: "Passlib or simple token-based authentication".
+    """
+    staff = db.staff_members.find_one({"staff_code": body.staff_code})
+    if not staff:
+        raise HTTPException(status_code=401, detail="Invalid staff code or password.")
+
+    if not pwd_context.verify(body.password, staff.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid staff code or password.")
+
+    if not staff.get("active", True):
+        raise HTTPException(status_code=403, detail="Account is inactive.")
+
+    staff = _serialize(staff)
+    staff.pop("password_hash", None)   # Never return hash to client
+    return staff
 
 
 # ── GET /staff/{staff_id} ─────────────────────────────────────────────────────
