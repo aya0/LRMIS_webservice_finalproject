@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import create_indexes
-from routes import staff, survey
+from routes import staff, survey, analytics
 
 app = FastAPI(
     title="LRMIS — Module 3: Surveyors, Registrar & Assignment",
@@ -17,8 +17,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(staff.router,  tags=["Staff & Auth"])
-app.include_router(survey.router, tags=["Survey & Assignment"])
+app.include_router(staff.router,     tags=["Staff & Auth"])
+app.include_router(survey.router,    tags=["Survey & Assignment"])
+app.include_router(analytics.router, tags=["Analytics & Geofeeds"])
 
 
 @app.on_event("startup")

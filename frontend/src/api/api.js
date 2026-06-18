@@ -60,3 +60,5 @@ export const getProcessingTime       = () => api.get('/analytics/processing-time
 export const getSurveyorAnalytics    = () => api.get('/analytics/surveyors').catch(() => ({ data: [] }))
 export const getParcelGeoFeed        = () => api.get('/analytics/geofeeds/parcels').catch(() => ({ data: { features: [] } }))
 export const getPendingHeatmap       = () => api.get('/analytics/geofeeds/pending-heatmap').catch(() => ({ data: { features: [] } }))
+export const getCertificatesPerMonth = () => api.get('/analytics/certificates-per-month')
+export const getObjectionStats       = () => api.get('/analytics/objection-stats')

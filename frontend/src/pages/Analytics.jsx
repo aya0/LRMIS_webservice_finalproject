@@ -11,7 +11,8 @@ import {
 } from 'recharts'
 import {
   getKPIs, getApplicationsByStatus, getApplicationsByZone,
-  getProcessingTime, getSurveyorAnalytics
+  getProcessingTime, getSurveyorAnalytics, getCertificatesPerMonth,
+  getObjectionStats
 } from '../api/api'
 
 function KPICard({ label, value, icon, accent = '#2563eb' }) {
@@ -59,12 +60,14 @@ function PlaceholderChart({ title, subtitle }) {
 const CHART_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
 export default function Analytics() {
-  const [kpis,      setKpis]      = useState({})
-  const [byStatus,  setByStatus]  = useState([])
-  const [byZone,    setByZone]    = useState([])
-  const [procTime,  setProcTime]  = useState([])
-  const [surveyors, setSurveyors] = useState([])
-  const [loading,   setLoading]   = useState(true)
+  const [kpis,       setKpis]       = useState({})
+  const [byStatus,   setByStatus]   = useState([])
+  const [byZone,     setByZone]     = useState([])
+  const [procTime,   setProcTime]   = useState([])
+  const [surveyors,  setSurveyors]  = useState([])
+  const [certsMonth, setCertsMonth] = useState([])
+  const [objStats,   setObjStats]   = useState([])
+  const [loading,    setLoading]    = useState(true)
 
   useEffect(() => {
     Promise.all([
@@ -73,12 +76,16 @@ export default function Analytics() {
       getApplicationsByZone(),
       getProcessingTime(),
       getSurveyorAnalytics(),
-    ]).then(([k, s, z, p, sv]) => {
+      getCertificatesPerMonth().catch(() => ({ data: [] })),
+      getObjectionStats().catch(() => ({ data: [] })),
+    ]).then(([k, s, z, p, sv, cm, ob]) => {
       setKpis(k.data ?? {})
       setByStatus(Array.isArray(s.data) ? s.data : [])
       setByZone(Array.isArray(z.data) ? z.data : [])
       setProcTime(Array.isArray(p.data) ? p.data : [])
       setSurveyors(Array.isArray(sv.data) ? sv.data : [])
+      setCertsMonth(Array.isArray(cm.data) ? cm.data : [])
+      setObjStats(Array.isArray(ob.data) ? ob.data : [])
     }).finally(() => setLoading(false))
   }, [])
 
@@ -187,8 +194,39 @@ export default function Analytics() {
           <PlaceholderChart title="Surveyor Workload" subtitle="Group module endpoint required" />
         )}
 
-        <PlaceholderChart title="Applications under Objection over Time" subtitle="Group module endpoint required" />
-        <PlaceholderChart title="Certificates Issued per Month"          subtitle="Group module endpoint required" />
+        {/* Applications under objection over time */}
+        {objStats.length > 0 ? (
+          <ChartCard title="Applications under Objection" subtitle="Count over time">
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={objStats}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                <Line type="monotone" dataKey="count" stroke="#f59e0b" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        ) : (
+          <PlaceholderChart title="Applications under Objection over Time" subtitle="Group module — GET /analytics/objection-stats" />
+        )}
+
+        {/* Certificates issued per month */}
+        {certsMonth.length > 0 ? (
+          <ChartCard title="Certificates Issued per Month" subtitle="Monthly issuance trend">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={certsMonth} barSize={32}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                <Bar dataKey="count" fill="#10b981" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        ) : (
+          <PlaceholderChart title="Certificates Issued per Month" subtitle="Group module — GET /analytics/certificates-per-month" />
+        )}
 
       </div>
     </div>

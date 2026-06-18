@@ -60,18 +60,13 @@ export default function TaskExecution() {
 
   function loadTask() {
     setLoading(true)
-    // We fetch by task object id — the task's application_id is on the task
-    // getSurveyTask needs application_id, but we have taskId here.
-    // For now we call survey-tasks directly.
-    import('../api/api').then(({ default: _, ...api }) => {
-      fetch(`/api/survey-tasks/${taskId}`)
-        .then(r => r.json())
-        .then(data => { setTask(data); setLoading(false) })
-        .catch(() => {
-          setError('Could not load task.')
-          setLoading(false)
-        })
-    })
+    fetch(`/api/survey-tasks/${taskId}`)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then(data => { setTask(data); setLoading(false) })
+      .catch(() => { setError('Could not load task. Is the backend running?'); setLoading(false) })
   }
 
   async function handleMilestone(milestone) {
