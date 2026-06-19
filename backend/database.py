@@ -16,15 +16,39 @@ application_documents = db["application_documents"]
 applicant_comments    = db["applicant_comments"]
 objections            = db["objections"]
 
-# ── Collections owned by other modules (read-only from here) ──────────────────
-# PLACEHOLDER (Student 1): land_applications, parcels, certificates collections
-land_applications = db["land_applications"]   # read-only — Student 1 owns this
-parcels           = db["parcels"]             # read-only — Student 1 owns this
-certificates      = db["certificates"]        # read-only — Student 1 owns this
+# MODULE 1: Land Administration collections
+land_applications = db["land_applications"]   
+parcels           = db["parcels"] 
+performance_logs = db["performance_logs"]          
+certificates      = db["certificates"]  
 
 
 def create_indexes():
     """Create all required indexes from the project spec."""
+
+    # land_applications indexes Module 1
+    land_applications.create_index("application_id", unique=True)
+    land_applications.create_index("status")
+    land_applications.create_index("application_type")
+    land_applications.create_index("parcel_ref.parcel_number")
+    land_applications.create_index("parcel_ref.zone_id")
+    land_applications.create_index("timestamps.submitted_at")
+    land_applications.create_index("idempotency_key", sparse=True)
+
+    # parcels indexes Module 1
+    parcels.create_index("parcel_code", unique=True)
+    parcels.create_index([("geometry", GEOSPHERE)])
+    parcels.create_index("zone_id")
+    parcels.create_index("parcel_number")
+
+    # certificates
+    certificates.create_index("certificate_id", unique=True)
+    certificates.create_index("application_id")
+
+    # performance_logs
+    performance_logs.create_index("application_id")
+
+
 
     # Module 3 required indexes (spec page: Required MongoDB Indexes)
     staff_members.create_index("staff_code", unique=True)
@@ -47,8 +71,5 @@ def create_indexes():
     objections.create_index("application_id")
     objections.create_index("applicant_id")
     performance_logs.create_index("application_id")
-
-    # PLACEHOLDER (Student 1): parcel 2dsphere index — owned by Student 1
-    # parcels.create_index([("geometry", GEOSPHERE)])
 
     print("Indexes created successfully.")
