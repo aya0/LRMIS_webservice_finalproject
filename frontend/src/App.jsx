@@ -6,6 +6,15 @@ import SurveyorTasks from './pages/SurveyorTasks'
 import TaskExecution  from './pages/TaskExecution'
 import LiveMap        from './pages/LiveMap'
 import Analytics      from './pages/Analytics'
+import ApplicantDashboard from './pages/applicant/ApplicantDashboard'
+import CreateApplicantProfile from './pages/applicant/CreateApplicantProfile'
+import ApplicantApplications from './pages/applicant/ApplicantApplications'
+import UploadDocument from './pages/applicant/UploadDocument'
+import SubmitComment from './pages/applicant/SubmitComment'
+import SubmitObjection from './pages/applicant/SubmitObjection'
+import ApplicationTimeline from './pages/applicant/ApplicationTimeline'
+import ApplicantProfile from './pages/applicant/ApplicantProfile'
+import ApplicantSettings from './pages/applicant/ApplicantSettings'
 
 const NAV = [
   {
@@ -159,6 +168,15 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/applicant" element={<ApplicantDashboard />} />
+        <Route path="/applicant/create-profile" element={<CreateApplicantProfile />} />
+        <Route path="/applicant/applications" element={<ApplicantApplications />} />
+        <Route path="/applicant/upload-document" element={<UploadDocument />} />
+        <Route path="/applicant/comment" element={<SubmitComment />} />
+        <Route path="/applicant/objection" element={<SubmitObjection />} />
+        <Route path="/applicant/timeline" element={<ApplicationTimeline />} />
+        <Route path="/applicant/profile" element={<ApplicantProfile />} />
+        <Route path="/applicant/settings" element={<ApplicantSettings />} />
         <Route path="/*"     element={<Shell />} />
       </Routes>
     </AuthProvider>

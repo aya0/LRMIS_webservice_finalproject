@@ -1,7 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import create_indexes
-from routes import staff, survey
+from routes import (
+    staff,
+    survey,
+    applicants,
+    applicant_documents,
+    applicant_comments,
+    applicant_objections,
+    applicant_timeline,
+)
 
 app = FastAPI(
     title="LRMIS — Module 3: Surveyors, Registrar & Assignment",
@@ -19,6 +27,13 @@ app.add_middleware(
 
 app.include_router(staff.router,  tags=["Staff & Auth"])
 app.include_router(survey.router, tags=["Survey & Assignment"])
+
+# MODULE 2: Applicant Portal and Profiles
+app.include_router(applicants.router, tags=["Module 2 - Applicants"])
+app.include_router(applicant_documents.router, tags=["Module 2 - Documents"])
+app.include_router(applicant_comments.router, tags=["Module 2 - Comments"])
+app.include_router(applicant_objections.router, tags=["Module 2 - Objections"])
+app.include_router(applicant_timeline.router, tags=["Module 2 - Timeline"])
 
 
 @app.on_event("startup")

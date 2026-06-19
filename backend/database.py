@@ -10,6 +10,12 @@ survey_tasks      = db["survey_tasks"]
 survey_reports    = db["survey_reports"]
 performance_logs  = db["performance_logs"]
 
+# MODULE 2: Applicant Portal collections
+applicants            = db["applicants"]
+application_documents = db["application_documents"]
+applicant_comments    = db["applicant_comments"]
+objections            = db["objections"]
+
 # ── Collections owned by other modules (read-only from here) ──────────────────
 # PLACEHOLDER (Student 1): land_applications and parcels collections
 land_applications = db["land_applications"]   # read-only — Student 1 owns this
@@ -28,6 +34,17 @@ def create_indexes():
     survey_tasks.create_index("status")
     staff_members.create_index("role")
     staff_members.create_index("coverage.zone_ids")
+    performance_logs.create_index("application_id")
+
+    # MODULE 2 indexes
+    applicants.create_index("identity.national_id", unique=True, sparse=True)
+    applicants.create_index("identity.registration_number", unique=True, sparse=True)
+    application_documents.create_index("application_id")
+    application_documents.create_index("applicant_id")
+    applicant_comments.create_index("application_id")
+    applicant_comments.create_index("applicant_id")
+    objections.create_index("application_id")
+    objections.create_index("applicant_id")
     performance_logs.create_index("application_id")
 
     # PLACEHOLDER (Student 1): parcel 2dsphere index — owned by Student 1
