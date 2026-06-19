@@ -4,12 +4,14 @@ from database import create_indexes
 from routes import (
     staff,
     survey,
+    analytics,
     applicants,
     applicant_documents,
     applicant_comments,
     applicant_objections,
     applicant_timeline,
 )
+from routes import staff, survey, analytics
 
 app = FastAPI(
     title="LRMIS — Module 3: Surveyors, Registrar & Assignment",
@@ -25,8 +27,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(staff.router,  tags=["Staff & Auth"])
-app.include_router(survey.router, tags=["Survey & Assignment"])
+app.include_router(staff.router,     tags=["Staff & Auth"])
+app.include_router(survey.router,    tags=["Survey & Assignment"])
+app.include_router(analytics.router, tags=["Analytics & Geofeeds"])
 
 # MODULE 2: Applicant Portal and Profiles
 app.include_router(applicants.router, tags=["Module 2 - Applicants"])

@@ -17,9 +17,10 @@ applicant_comments    = db["applicant_comments"]
 objections            = db["objections"]
 
 # ── Collections owned by other modules (read-only from here) ──────────────────
-# PLACEHOLDER (Student 1): land_applications and parcels collections
+# PLACEHOLDER (Student 1): land_applications, parcels, certificates collections
 land_applications = db["land_applications"]   # read-only — Student 1 owns this
 parcels           = db["parcels"]             # read-only — Student 1 owns this
+certificates      = db["certificates"]        # read-only — Student 1 owns this
 
 
 def create_indexes():

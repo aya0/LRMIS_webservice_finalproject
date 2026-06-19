@@ -62,3 +62,5 @@ export const getParcelGeoFeed        = () => api.get('/analytics/geofeeds/parcel
 export const getPendingHeatmap       = () => api.get('/analytics/geofeeds/pending-heatmap').catch(() => ({ data: { features: [] } }))
 
 export default api
+export const getCertificatesPerMonth = () => api.get('/analytics/certificates-per-month')
+export const getObjectionStats       = () => api.get('/analytics/objection-stats')

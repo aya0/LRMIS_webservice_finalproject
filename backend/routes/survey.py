@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Depends
 from typing import Optional
 from datetime import datetime
 from bson import ObjectId
@@ -9,6 +9,7 @@ from models.survey_task import (
 )
 from models.survey_report import SurveyReportCreate, SurveyReportOut, RegistrarReviewRequest
 from services.assignment import find_best_surveyor
+from routes.staff import require_staff
 
 router = APIRouter()
 
@@ -214,7 +215,8 @@ def upload_survey_report(application_id: str, body: SurveyReportCreate):
 
 # ── PATCH /applications/{application_id}/registrar-review ────────────────────
 @router.patch("/applications/{application_id}/registrar-review", response_model=dict)
-def registrar_review(application_id: str, body: RegistrarReviewRequest):
+def registrar_review(application_id: str, body: RegistrarReviewRequest,
+                     _staff=Depends(require_staff)):
     """
     Registrar reviews the survey results and makes a decision.
     Valid decisions: approved, rejected, needs_revision.
@@ -283,6 +285,24 @@ def registrar_review(application_id: str, body: RegistrarReviewRequest):
     }
 
 
+# ── GET /survey-tasks/{task_id} (by MongoDB ObjectId) ────────────────────────
+@router.get("/survey-tasks/{task_id}", response_model=dict)
+def get_survey_task_by_id(task_id: str):
+    """
+    Retrieve a single survey task by its MongoDB ObjectId.
+    Used by TaskExecution.jsx which navigates to /tasks/{task.id}.
+    """
+    try:
+        oid = ObjectId(task_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid task_id format.")
+
+    task = db.survey_tasks.find_one({"_id": oid})
+    if not task:
+        raise HTTPException(status_code=404, detail="Survey task not found.")
+    return _serialize(task)
+
+
 # ── GET /applications/{application_id}/survey-task ───────────────────────────
 @router.get("/applications/{application_id}/survey-task", response_model=dict)
 def get_survey_task(application_id: str):
@@ -310,7 +330,8 @@ def list_surveyor_tasks(surveyor_id: str, status: Optional[str] = None):
 
 # ── PATCH /applications/{application_id}/reassign-surveyor ───────────────────
 @router.patch("/applications/{application_id}/reassign-surveyor", response_model=dict)
-def reassign_surveyor(application_id: str, new_surveyor_id: str, reason: str = "manual reassignment"):
+def reassign_surveyor(application_id: str, new_surveyor_id: str, reason: str = "manual reassignment",
+                      _staff=Depends(require_staff)):
     """
     Manually reassign a survey task to a different surveyor.
     Spec: "Support manual reassignment".
