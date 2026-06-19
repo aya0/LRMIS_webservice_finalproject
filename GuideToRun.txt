@@ -1,0 +1,13 @@
+# Backend
+cd module1/backend
+cp .env.example .env   # add your MongoDB URI.  // if it mac  1- python3 -m venv env 
+                                                              2- source env/bin/activate 
+                                                              
+pip install -r requirements.txt
+python seed.py         # optional sample data
+uvicorn main:app --reload  # runs on :8000
+
+# Frontend  
+cd module1/frontend
+npm install
+npm run dev            # runs on :5174
