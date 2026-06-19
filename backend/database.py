@@ -48,8 +48,6 @@ def create_indexes():
     # performance_logs
     performance_logs.create_index("application_id")
 
-
-
     # Module 3 required indexes (spec page: Required MongoDB Indexes)
     staff_members.create_index("staff_code", unique=True)
     survey_tasks.create_index("application_id")
