@@ -8,7 +8,7 @@ COMP4382 Final Project — 2025/2026
 
 | Module | Student | ID | Responsibility |
 |--------|---------|-----|----------------|
-| Module 1 — Land Application Management | [STUDENT 1 NAME] | [ID] | Applications, workflow state machine, parcels, certificates |
+| Module 1 — Land Application Management | Aya Nasser | 1220020 | Applications, workflow state machine, parcels, certificates |
 | Module 2 — Applicant Portal | [STUDENT 2 NAME] | [ID] | Applicant profiles, document upload, objections, status tracking |
 | **Module 3 — Surveyors, Registrar & Assignment** | **Tala** | **1220536** | Staff management, auto-assignment engine, survey milestones, registrar review |
 | Module 4 — Analytics & Map | All three students | — | Dashboards, live map, geospatial queries, aggregation pipelines |
