@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, NavLink, Navigate, useNavigate  , BrowserRouter } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Login         from './pages/Login'
 import Home          from './pages/Home'
@@ -16,6 +16,21 @@ import ApplicationTimeline from './pages/applicant/ApplicationTimeline'
 import ApplicantProfile from './pages/applicant/ApplicantProfile'
 import ApplicantSettings from './pages/applicant/ApplicantSettings'
 
+import Sidebar from './context/Sidebar';
+import Dashboard from './pages/Dashboard';
+import SubmitApplication from './pages/SubmitApplication';
+import ApplicationsList from './pages/ApplicationsList';
+import ApplicationDetail from './pages/ApplicationDetail';
+import Parcels from './pages/Parcels';
+import StaffConsole from './pages/StaffConsole';
+import Certificates from './pages/Certificates';
+import './global.css';
+
+
+/*
+  This is a comment
+  inside JavaScript code
+*/
 const NAV = [
   {
     to: '/home',
@@ -178,6 +193,15 @@ export default function App() {
         <Route path="/applicant/profile" element={<ApplicantProfile />} />
         <Route path="/applicant/settings" element={<ApplicantSettings />} />
         <Route path="/*"     element={<Shell />} />
+
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/submit" element={<SubmitApplication />} />
+        <Route path="/applications" element={<ApplicationsList />} />
+        <Route path="/applications/:id" element={<ApplicationDetail />} />
+        <Route path="/parcels" element={<Parcels />} />
+        <Route path="/staff" element={<StaffConsole />} />
+        <Route path="/certificates" element={<Certificates />} />
+
       </Routes>
     </AuthProvider>
   )
