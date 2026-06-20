@@ -26,6 +26,11 @@ import StaffConsole from './pages/StaffConsole';
 import Certificates from './pages/Certificates';
 import './global.css';
 
+
+/*
+  This is a comment
+  inside JavaScript code
+*/
 const NAV = [
   {
     to: '/home',
