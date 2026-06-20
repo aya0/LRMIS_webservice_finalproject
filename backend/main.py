@@ -53,16 +53,6 @@ app.include_router(applicant_timeline.router, tags=["Module 2 - Timeline"])
 ##    create_indexes()
 
 
-
-
 @app.get("/", tags=["Health"])
 def health():
     return {"status": "ok", "message": "ALL Modules Backend Running successfully."}
-
-@app.get("/")
-def root():
-    return {
-        "module": "Module 1 — Land Application Management",
-        "docs": "/docs",
-        "redoc": "/redoc",
-    }

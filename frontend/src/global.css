@@ -1,0 +1,240 @@
+/* ==========================================================================
+   Land Registry Dashboard — "Ledger" theme
+   A civic records-office aesthetic: paper surfaces, ink-blue accents,
+   and status badges styled like rubber registry stamps.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+:root {
+  /* Paper & surface */
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --border: #ddd9cf;
+  --border-strong: #c9c4b6;
+
+  /* Ink */
+  --ink: #1c2b3a;
+  --text-muted: #6a6f76;
+
+  /* Registry blue (primary) */
+  --primary: #2c4a6e;
+  --primary-dark: #1b324b;
+  --primary-tint: #e8edf2;
+
+  /* Status inks */
+  --green: #2f6b4f;
+  --green-tint: #e7f0ea;
+  --orange: #b8761e;
+  --orange-tint: #f6ecdb;
+  --red: #a4392e;
+  --red-tint: #f3e3e0;
+  --teal: #2c7a7b;
+  --teal-tint: #e3eeee;
+  --purple: #6b4c7a;
+  --purple-tint: #ece4ef;
+  --slate: #5b6472;
+  --slate-tint: #e9eaec;
+  --maroon: #7a2e2e;
+  --maroon-tint: #efe1e0;
+
+  --radius: 3px;
+  --font-display: 'Source Serif 4', Georgia, serif;
+  --font-body: 'IBM Plex Sans', -apple-system, Segoe UI, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--primary); }
+
+/* -------------------------------------------------------------------------
+   Page title — letterhead style
+   ------------------------------------------------------------------------- */
+.page-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.6rem;
+  color: var(--primary-dark);
+  padding-bottom: 14px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--ink);
+  position: relative;
+}
+.page-title::after {
+  content: '';
+  position: absolute;
+  left: 0; bottom: -5px;
+  width: 100%;
+  height: 1px;
+  background: var(--border-strong);
+}
+
+/* -------------------------------------------------------------------------
+   Layout utilities
+   ------------------------------------------------------------------------- */
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.mb-16 { margin-bottom: 16px; }
+.mt-16 { margin-top: 16px; }
+
+@media (max-width: 900px) {
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-2 { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .grid-4 { grid-template-columns: 1fr; }
+}
+
+/* -------------------------------------------------------------------------
+   Stat cards — ledger tabs: a thin colored spine on the left,
+   numerals set in mono like a tally
+   ------------------------------------------------------------------------- */
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.stat-card .label {
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.stat-card .value {
+  font-family: var(--font-mono);
+  font-size: 1.9rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.stat-card .value.blue   { color: var(--primary); }
+.stat-card .value.green  { color: var(--green); }
+.stat-card .value.orange { color: var(--orange); }
+.stat-card .value.red    { color: var(--red); }
+
+.stat-card:has(.value.blue)   { border-left-color: var(--primary); }
+.stat-card:has(.value.green)  { border-left-color: var(--green); }
+.stat-card:has(.value.orange) { border-left-color: var(--orange); }
+.stat-card:has(.value.red)    { border-left-color: var(--red); }
+
+/* -------------------------------------------------------------------------
+   Cards — document panels with a double-rule header, like a letterhead
+   ------------------------------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.card-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--primary-dark);
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  padding: 18px 0;
+}
+
+.loading {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  padding: 40px;
+  text-align: center;
+}
+
+/* -------------------------------------------------------------------------
+   Buttons
+   ------------------------------------------------------------------------- */
+.btn {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 9px 16px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.btn-primary:hover { background: var(--primary-dark); }
+
+.btn-outline {
+  background: transparent;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.btn-outline:hover { background: var(--primary-tint); }
+
+.btn-sm { padding: 6px 12px; font-size: 0.78rem; }
+
+/* -------------------------------------------------------------------------
+   Status badges — styled like ink registry stamps: uppercase mono type,
+   a tinted fill, and a dashed inner rule for a "stamped" feel
+   ------------------------------------------------------------------------- */
+.status-badge,
+[class*="status-"] > .badge,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  border: 1px dashed currentColor;
+  white-space: nowrap;
+}
+
+.status-submitted          { color: var(--slate);  background: var(--slate-tint); }
+.status-pre_checked        { color: var(--teal);    background: var(--teal-tint); }
+.status-survey_required    { color: var(--orange);  background: var(--orange-tint); }
+.status-surveyed           { color: var(--primary); background: var(--primary-tint); }
+.status-legal_review       { color: var(--purple);  background: var(--purple-tint); }
+.status-approved           { color: var(--green);   background: var(--green-tint); }
+.status-certificate_issued { color: var(--green);   background: var(--green-tint); }
+.status-closed             { color: var(--slate);   background: var(--slate-tint); }
+.status-rejected           { color: var(--red);     background: var(--red-tint); }
+.status-on_hold            { color: var(--orange);  background: var(--orange-tint); }
+.status-missing_documents  { color: var(--red);     background: var(--red-tint); }
+.status-under_objection    { color: var(--maroon);  background: var(--maroon-tint); }
