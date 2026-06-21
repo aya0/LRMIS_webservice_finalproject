@@ -1,0 +1,32 @@
+Test Dataset Usage
+
+This seed set is designed for local end-to-end testing of the land registration system.
+
+What it creates
+- 100 applicants
+- 100 parcels
+- 100 land applications
+- 12 staff accounts
+- survey tasks for applications that reached survey flow
+- survey reports, documents, comments, objections, performance logs, and certificates
+
+Main demo accounts
+- Surveyors: SURV-001 through SURV-008
+- Registrars: REG-001 through REG-004
+- Demo password for all seeded staff: demo-pass
+
+Recommended test coverage
+- Application types: first_registration, ownership_transfer, parcel_subdivision, parcel_merge, boundary_correction, certificate_request
+- Application states: submitted, pre_checked, survey_required, surveyed, legal_review, approved, certificate_issued, closed, rejected, on_hold, missing_documents, under_objection
+- Parcel states: registered and pending, with multiple zones and land use types
+- Staff flows: assignment, workload balancing, survey progress, registrar review
+- Applicant portal flows: documents, comments, objections, status tracking
+
+Quick test IDs
+- Use application IDs in the format LRMIS-2026-0001 through LRMIS-2026-0100
+- Use parcel IDs and applicant records with the same numeric index for linked cases
+- Use SURV-001 for surveyor tests and REG-001 for registrar tests
+
+Notes
+- The dataset is deterministic, so rerunning the script clears the collections first and reloads the same record structure.
+- If you need a single fully completed flow, use application LRMIS-2026-0006 or any record with status certificate_issued or closed.
