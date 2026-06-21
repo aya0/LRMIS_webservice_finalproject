@@ -96,23 +96,29 @@ export default function ApplicationDetail() {
   ].filter(e => e.date);
 
   return (
-    <div>
-      <div className="flex-between mb-16">
-        <div>
-          <div className="page-title">🗂️ {app.application_id}</div>
-          <p className="page-sub">{app.application_type?.replace(/_/g,' ')} · {app.parcel_ref?.zone_id}</p>
+    <div className="module1-shell">
+      <section className="module1-hero">
+        <span className="module1-kicker">Module 1 · Application Detail</span>
+        <h1 className="module1-title">{app.application_id}</h1>
+        <p className="module1-subtitle">
+          {app.application_type?.replace(/_/g,' ')} · {app.parcel_ref?.zone_id} · Current state: {app.status}
+        </p>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
+          <Link to="/applications" className="btn btn-outline">← Back to Applications</Link>
+          <Link to="/parcels" className="btn btn-outline">Open Parcels</Link>
+          <Link to="/certificates" className="btn btn-outline">Open Certificates</Link>
         </div>
-        <Link to="/applications" className="btn btn-outline btn-sm">← Back</Link>
-      </div>
+      </section>
 
       {error && <div className="alert alert-error">{error}</div>}
       {msg && <div className="alert alert-success">{msg}</div>}
 
-      <div className="grid-2">
+      <div className="module1-card-grid cols-2">
         {/* Left */}
         <div>
           {/* Status card */}
-          <div className="card mb-16">
+          <div className="module1-card module1-card-accent">
             <div className="card-title">Current Status</div>
             <div style={{ marginBottom: 12 }}>
               <StatusBadge status={app.status} />
@@ -148,7 +154,7 @@ export default function ApplicationDetail() {
           </div>
 
           {/* Parcel info */}
-          <div className="card mb-16">
+          <div className="module1-card">
             <div className="card-title">Parcel Information</div>
             <table style={{ width: '100%', fontSize: '0.88rem' }}>
               <tbody>
@@ -168,7 +174,7 @@ export default function ApplicationDetail() {
           </div>
 
           {/* Documents */}
-          <div className="card mb-16">
+          <div className="module1-card">
             <div className="card-title">Required Documents</div>
             {(app.required_documents || []).length === 0
               ? <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>No documents attached.</p>
@@ -182,7 +188,7 @@ export default function ApplicationDetail() {
           </div>
 
           {/* Assignment */}
-          <div className="card">
+          <div className="module1-card">
             <div className="card-title">Assignment</div>
             <table style={{ width: '100%', fontSize: '0.88rem' }}>
               <tbody>
@@ -204,7 +210,7 @@ export default function ApplicationDetail() {
         {/* Right */}
         <div>
           {/* Applicant */}
-          <div className="card mb-16">
+          <div className="module1-card">
             <div className="card-title">Applicant</div>
             <table style={{ width: '100%', fontSize: '0.88rem' }}>
               <tbody>
@@ -223,7 +229,7 @@ export default function ApplicationDetail() {
           </div>
 
           {/* Timeline */}
-          <div className="card mb-16">
+          <div className="module1-card">
             <div className="card-title">Status Timeline</div>
             {timelineEntries.length === 0
               ? <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>No timeline yet.</p>
@@ -241,7 +247,7 @@ export default function ApplicationDetail() {
           </div>
 
           {/* Internal Notes */}
-          <div className="card mb-16">
+          <div className="module1-card">
             <div className="card-title">Internal Notes</div>
             {(app.internal?.notes || []).length === 0
               ? <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>No notes.</p>
@@ -255,7 +261,7 @@ export default function ApplicationDetail() {
 
           {/* Certificate */}
           {app.certificate && (
-            <div className="card">
+            <div className="module1-card">
               <div className="card-title">📜 Certificate</div>
               <div style={{ fontSize: '0.88rem' }}>
                 <div><strong>ID:</strong> {app.certificate.certificate_id}</div>
@@ -266,7 +272,7 @@ export default function ApplicationDetail() {
 
           {/* Description */}
           {app.description && (
-            <div className="card mt-16">
+            <div className="module1-card">
               <div className="card-title">Description</div>
               <p style={{ fontSize: '0.9rem', color: 'var(--text)' }}>{app.description}</p>
             </div>

@@ -10,9 +10,10 @@ import {
   Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import {
-  getKPIs, getApplicationsByStatus, getApplicationsByZone,
-  getProcessingTime, getSurveyorAnalytics, getCertificatesPerMonth,
-  getObjectionStats
+  getKPIs, getApplicationsByStatus, getApplicationsByType, getApplicationsByZone,
+  getProcessingTime, getSurveyorAnalytics, getRegistrarAnalytics, getCertificatesPerMonth,
+  getObjectionStats, getDelayedApplications, getHotspotZones,
+  downloadManagementReport
 } from '../api/api'
 
 function KPICard({ label, value, icon, accent = '#2563eb' }) {
@@ -62,30 +63,55 @@ const CHART_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#e
 export default function Analytics() {
   const [kpis,       setKpis]       = useState({})
   const [byStatus,   setByStatus]   = useState([])
+  const [byType,     setByType]     = useState([])
   const [byZone,     setByZone]     = useState([])
   const [procTime,   setProcTime]   = useState([])
   const [surveyors,  setSurveyors]  = useState([])
+  const [registrars, setRegistrars] = useState([])
   const [certsMonth, setCertsMonth] = useState([])
   const [objStats,   setObjStats]   = useState([])
+  const [delayed,    setDelayed]    = useState({ count: 0, items: [] })
+  const [hotspots,   setHotspots]   = useState([])
   const [loading,    setLoading]    = useState(true)
+
+  async function downloadReport(format) {
+    const response = await downloadManagementReport(format)
+    const blob = response.data
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `lrmis-management-report.${format}`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  }
 
   useEffect(() => {
     Promise.all([
       getKPIs(),
       getApplicationsByStatus(),
+      getApplicationsByType(),
       getApplicationsByZone(),
       getProcessingTime(),
       getSurveyorAnalytics(),
+      getRegistrarAnalytics(),
       getCertificatesPerMonth().catch(() => ({ data: [] })),
       getObjectionStats().catch(() => ({ data: [] })),
-    ]).then(([k, s, z, p, sv, cm, ob]) => {
+      getDelayedApplications().catch(() => ({ data: { count: 0, items: [] } })),
+      getHotspotZones().catch(() => ({ data: [] })),
+    ]).then(([k, s, t, z, p, sv, rg, cm, ob, dl, hs]) => {
       setKpis(k.data ?? {})
       setByStatus(Array.isArray(s.data) ? s.data : [])
+      setByType(Array.isArray(t.data) ? t.data : [])
       setByZone(Array.isArray(z.data) ? z.data : [])
       setProcTime(Array.isArray(p.data) ? p.data : [])
       setSurveyors(Array.isArray(sv.data) ? sv.data : [])
+      setRegistrars(Array.isArray(rg.data) ? rg.data : [])
       setCertsMonth(Array.isArray(cm.data) ? cm.data : [])
       setObjStats(Array.isArray(ob.data) ? ob.data : [])
+      setDelayed(dl.data ?? { count: 0, items: [] })
+      setHotspots(Array.isArray(hs.data) ? hs.data : [])
     }).finally(() => setLoading(false))
   }, [])
 
@@ -96,6 +122,14 @@ export default function Analytics() {
         <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest mb-1">Reporting</p>
         <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Analytics Dashboard</h1>
         <p className="text-slate-400 text-sm mt-1">System-wide KPIs and operational metrics</p>
+        <div className="flex gap-3 mt-5 flex-wrap">
+          <button onClick={() => downloadReport('csv')} className="bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+            Download CSV Report
+          </button>
+          <button onClick={() => downloadReport('pdf')} className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+            Download PDF Report
+          </button>
+        </div>
       </div>
 
       {/* Placeholder notice */}
@@ -119,6 +153,7 @@ export default function Analytics() {
         <KPICard label="Certificates Issued"   value={kpis.certificates_issued}          icon="🏛️" accent="#10b981" />
         <KPICard label="Avg Processing Time"   value={kpis.avg_processing_days ? `${kpis.avg_processing_days}d` : null} icon="⏱️" accent="#8b5cf6" />
         <KPICard label="Surveyor Active Tasks" value={kpis.surveyor_active_tasks}        icon="🗺️" accent="#2563eb" />
+        <KPICard label="Delayed Applications"  value={kpis.delayed_applications}         icon="🚨" accent="#dc2626" />
       </div>
 
       {/* Charts grid */}
@@ -140,6 +175,20 @@ export default function Analytics() {
         ) : (
           <PlaceholderChart title="Applications over Time / by Status" subtitle="Group module endpoint required" />
         )}
+
+        {byType.length > 0 ? (
+          <ChartCard title="Applications by Type" subtitle="Current distribution across application categories">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={byType} barSize={32}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="application_type" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                <Bar dataKey="count" fill="#0f766e" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        ) : null}
 
         {/* Pending by zone */}
         {byZone.length > 0 ? (
@@ -194,6 +243,22 @@ export default function Analytics() {
           <PlaceholderChart title="Surveyor Workload" subtitle="Group module endpoint required" />
         )}
 
+        {registrars.length > 0 ? (
+          <ChartCard title="Registrar Workload" subtitle="Review throughput and backlog per registrar">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={registrars} barSize={20}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="review_count" name="Reviews" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="inbox_backlog" name="Backlog" fill="#f97316" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        ) : null}
+
         {/* Applications under objection over time */}
         {objStats.length > 0 ? (
           <ChartCard title="Applications under Objection" subtitle="Count over time">
@@ -227,6 +292,41 @@ export default function Analytics() {
         ) : (
           <PlaceholderChart title="Certificates Issued per Month" subtitle="Group module — GET /analytics/certificates-per-month" />
         )}
+
+        <ChartCard title="Delayed Applications" subtitle={`Older than ${kpis.delayed_applications ?? 0 ? '30' : '30'} days and still pending`}>
+          <div className="space-y-3">
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Delayed Count</p>
+                <p className="text-3xl font-bold text-slate-800">{delayed.count ?? 0}</p>
+              </div>
+              <div className="text-xs text-slate-400">Open backlog over 30 days</div>
+            </div>
+            <div className="space-y-2 max-h-40 overflow-auto pr-1">
+              {(delayed.items ?? []).slice(0, 5).map(item => (
+                <div key={item.application_id} className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
+                  <div>
+                    <div className="text-sm font-medium text-slate-800">{item.application_id}</div>
+                    <div className="text-xs text-slate-400">{item.application_type} · {item.zone_id || 'Unknown zone'}</div>
+                  </div>
+                  <div className="text-sm font-semibold text-rose-600">{item.delay_days}d</div>
+                </div>
+              ))}
+              {(delayed.items ?? []).length === 0 && <p className="text-sm text-slate-400">No delayed applications found.</p>}
+            </div>
+          </div>
+        </ChartCard>
+
+        <ChartCard title="Hotspot Zones" subtitle="Zones with the highest application volume">
+          <div className="space-y-2">
+            {hotspots.length > 0 ? hotspots.map(zone => (
+              <div key={zone.zone_id} className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
+                <span className="text-sm font-medium text-slate-800">{zone.zone_id}</span>
+                <span className="text-sm font-semibold text-blue-600">{zone.count}</span>
+              </div>
+            )) : <p className="text-sm text-slate-400">No hotspot data yet.</p>}
+          </div>
+        </ChartCard>
 
       </div>
     </div>

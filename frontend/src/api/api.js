@@ -8,10 +8,11 @@ const api = axios.create({ baseURL: '/api' })
  */
 api.interceptors.request.use(config => {
   try {
-    const saved = localStorage.getItem('lrmis_staff')
+    const saved = localStorage.getItem('lrmis_auth')
     if (saved) {
-      const staff = JSON.parse(saved)
-      if (staff?.id) config.headers['X-Staff-Id'] = staff.id
+      const auth = JSON.parse(saved)
+      if (auth?.staff?.id) config.headers['X-Staff-Id'] = auth.staff.id
+      if (auth?.token) config.headers['Authorization'] = `Bearer ${auth.token}`
     }
   } catch {
     // ignore parse errors
@@ -54,13 +55,25 @@ export const addFieldNote = (taskId, data) =>
 
 // ── PLACEHOLDER: Analytics endpoints (Group module — Student 3 UI needs these)
 export const getKPIs                 = () => api.get('/analytics/kpis').catch(() => ({ data: {} }))
-export const getApplicationsByStatus = () => api.get('/analytics/applications-by-status').catch(() => ({ data: [] }))
-export const getApplicationsByZone   = () => api.get('/analytics/applications-by-zone').catch(() => ({ data: [] }))
+export const getApplicationsByStatus = () => api.get('/analytics/by-status').catch(() => ({ data: [] }))
+export const getApplicationsByType   = () => api.get('/analytics/by-type').catch(() => ({ data: [] }))
+export const getApplicationsByZone   = () => api.get('/analytics/by-zone').catch(() => ({ data: [] }))
 export const getProcessingTime       = () => api.get('/analytics/processing-time').catch(() => ({ data: [] }))
 export const getSurveyorAnalytics    = () => api.get('/analytics/surveyors').catch(() => ({ data: [] }))
-export const getParcelGeoFeed        = () => api.get('/analytics/geofeeds/parcels').catch(() => ({ data: { features: [] } }))
-export const getPendingHeatmap       = () => api.get('/analytics/geofeeds/pending-heatmap').catch(() => ({ data: { features: [] } }))
+export const getRegistrarAnalytics   = () => api.get('/analytics/registrars').catch(() => ({ data: [] }))
+export const getDelayedApplications   = () => api.get('/analytics/delayed-applications').catch(() => ({ data: { count: 0, items: [] } }))
+export const getHotspotZones         = () => api.get('/analytics/hotspot-zones').catch(() => ({ data: [] }))
+export const getParcelGeoFeed        = () => api.get('/analytics/parcel-geo-feed').catch(() => ({ data: { features: [] } }))
+export const getPendingHeatmap       = () => api.get('/analytics/pending-heatmap').catch(() => ({ data: { features: [] } }))
+export const getManagementReport     = (format = 'json') => api.get('/analytics/reports/management', { params: { format } })
+export const downloadManagementReport = async (format = 'csv') => {
+  const response = await api.get('/analytics/reports/management', {
+    params: { format },
+    responseType: 'blob',
+  })
+  return response
+}
 
 export default api
-export const getCertificatesPerMonth = () => api.get('/analytics/certificates-per-month')
-export const getObjectionStats       = () => api.get('/analytics/objection-stats')
+export const getCertificatesPerMonth = () => api.get('/analytics/certs-per-month')
+export const getObjectionStats       = () => api.get('/analytics/objections')

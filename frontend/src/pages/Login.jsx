@@ -30,12 +30,11 @@ export default function Login() {
         staff_code: staffCode.trim(),
         password,
       })
-      login(res.data)
-      if (res.data.role === 'registrar') {
-        navigate('/analytics')
-      } else {
-        navigate('/')
-      }
+      // API returns { access_token, token_type, staff }
+      const token = res.data?.access_token
+      const staff = res.data?.staff
+      login(staff, token)
+      navigate('/staff')
     } catch (err) {
       setError(err.response?.data?.detail ?? 'Login failed. Check your credentials.')
     } finally {

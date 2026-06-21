@@ -42,7 +42,8 @@ const PRIORITY_DOT = {
 }
 
 export default function SurveyorTasks() {
-  const { staff }                       = useAuth()
+  const { auth }                        = useAuth()
+  const staff                           = auth?.staff
   const [tasks,   setTasks]   = useState([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)

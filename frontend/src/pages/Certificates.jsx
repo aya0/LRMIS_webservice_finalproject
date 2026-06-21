@@ -20,11 +20,21 @@ export default function Certificates() {
   };
 
   return (
-    <div>
-      <div className="page-title">📜 Certificate Lookup</div>
-      <p className="page-sub">View and verify issued land registration certificates.</p>
+    <div className="module1-shell">
+      <section className="module1-hero">
+        <span className="module1-kicker">Module 1 · Certificates</span>
+        <h1 className="module1-title">Certificate lookup & verification</h1>
+        <p className="module1-subtitle">
+          Search issued certificates, review their metadata, and verify the digital record for a specific application.
+        </p>
 
-      <div className="card" style={{ maxWidth: 520, marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
+          <a className="btn btn-primary" href="/applications">Open Applications</a>
+          <a className="btn btn-outline" href="/parcels">Open Parcels</a>
+        </div>
+      </section>
+
+      <div className="module1-card module1-card-accent" style={{ maxWidth: 560 }}>
         <div className="card-title">Search Certificate</div>
         <div className="flex-gap">
           <input
@@ -39,8 +49,8 @@ export default function Certificates() {
       </div>
 
       {cert && (
-        <div className="grid-2">
-          <div className="card">
+        <div className="module1-card-grid cols-2">
+          <div className="module1-card">
             <div className="card-title">Certificate Details</div>
             <table style={{ width: '100%', fontSize: '0.88rem' }}>
               <tbody>
@@ -64,7 +74,7 @@ export default function Certificates() {
           </div>
 
           {verify && (
-            <div className="card">
+            <div className="module1-card">
               <div className="card-title">Verification Result</div>
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
                 <div style={{ fontSize: '3rem' }}>{verify.valid ? '✅' : '❌'}</div>

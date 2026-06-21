@@ -11,27 +11,39 @@ import { createContext, useContext, useState } from 'react'
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [staff, setStaff] = useState(() => {
+  const [auth, setAuth] = useState(() => {
     try {
-      const saved = localStorage.getItem('lrmis_staff')
-      return saved ? JSON.parse(saved) : null
+      const saved = localStorage.getItem('lrmis_auth')
+      return saved ? JSON.parse(saved) : { staff: null, applicant: null, token: null }
     } catch {
-      return null
+      return { staff: null, applicant: null, token: null }
     }
   })
 
-  function login(staffMember) {
-    localStorage.setItem('lrmis_staff', JSON.stringify(staffMember))
-    setStaff(staffMember)
+  // Backwards-compatible staff login (existing pages call `login`)
+  function login(staffMember, token) {
+    const payload = { staff: staffMember, applicant: null, token }
+    localStorage.setItem('lrmis_auth', JSON.stringify(payload))
+    setAuth(payload)
+  }
+
+  function loginStaff(staffMember, token) {
+    return login(staffMember, token)
+  }
+
+  function loginApplicant(applicant, token = null) {
+    const payload = { staff: null, applicant, token }
+    localStorage.setItem('lrmis_auth', JSON.stringify(payload))
+    setAuth(payload)
   }
 
   function logout() {
-    localStorage.removeItem('lrmis_staff')
-    setStaff(null)
+    localStorage.removeItem('lrmis_auth')
+    setAuth({ staff: null, applicant: null, token: null })
   }
 
   return (
-    <AuthContext.Provider value={{ staff, login, logout }}>
+    <AuthContext.Provider value={{ auth, login, loginStaff, loginApplicant, logout }}>
       {children}
     </AuthContext.Provider>
   )

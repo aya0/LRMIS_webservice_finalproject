@@ -30,7 +30,8 @@ const MILESTONE_LABELS = {
 export default function TaskExecution() {
   const { taskId }  = useParams()
   const navigate    = useNavigate()
-  const { staff }   = useAuth()
+  const { auth }    = useAuth()
+  const staff       = auth?.staff
   const ACTOR_ID    = staff?.id ?? 'unknown'
 
   const [task,         setTask]         = useState(null)

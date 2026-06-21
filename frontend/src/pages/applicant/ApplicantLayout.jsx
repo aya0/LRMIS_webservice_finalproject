@@ -1,8 +1,10 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { APPLICANT_ID_STORAGE_KEY } from './applicantUx'
+import { useAuth } from '../../context/AuthContext'
 import './applicantPortal.css'
 
 const PRIMARY_NAV_ITEMS = [
+  { to: '/applicant/home', label: 'Home', icon: 'HM' },
   { to: '/applicant/create-profile', label: 'Create Profile', icon: 'CP' },
   { to: '/applicant/applications', label: 'My Applications', icon: 'MA' },
   { to: '/applicant/upload-document', label: 'Upload Document', icon: 'DO' },
@@ -18,6 +20,7 @@ const SECONDARY_NAV_ITEMS = [
 
 export default function ApplicantLayout({ children, narrow = false }) {
   const navigate = useNavigate()
+  const { logout } = useAuth()
 
   function handleLogout() {
     try {
@@ -25,7 +28,8 @@ export default function ApplicantLayout({ children, narrow = false }) {
     } catch {
       // Local storage may be unavailable in private contexts.
     }
-    navigate('/applicant')
+    logout()
+    navigate('/', { replace: true })
   }
 
   return (
@@ -46,7 +50,7 @@ export default function ApplicantLayout({ children, narrow = false }) {
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/applicant'}
+              end={item.to === '/applicant/home'}
               className={({ isActive }) =>
                 `applicant-sidebar-link${isActive ? ' applicant-sidebar-link-active' : ''}`
               }
@@ -73,7 +77,7 @@ export default function ApplicantLayout({ children, narrow = false }) {
 
           <button type="button" className="applicant-sidebar-link applicant-sidebar-logout" onClick={handleLogout}>
             <span>LO</span>
-            Logout
+            Sign out
           </button>
         </nav>
       </aside>

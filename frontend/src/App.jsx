@@ -2,11 +2,13 @@ import { Routes, Route, NavLink, Navigate, useNavigate  , BrowserRouter } from '
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Login         from './pages/Login'
 import Home          from './pages/Home'
+import StaffHome     from './pages/StaffHome'
 import SurveyorTasks from './pages/SurveyorTasks'
 import TaskExecution  from './pages/TaskExecution'
 import LiveMap        from './pages/LiveMap'
 import Analytics      from './pages/Analytics'
 import ApplicantDashboard from './pages/applicant/ApplicantDashboard'
+import ApplicantHome from './pages/applicant/ApplicantHome'
 import CreateApplicantProfile from './pages/applicant/CreateApplicantProfile'
 import ApplicantApplications from './pages/applicant/ApplicantApplications'
 import UploadDocument from './pages/applicant/UploadDocument'
@@ -17,6 +19,7 @@ import ApplicantProfile from './pages/applicant/ApplicantProfile'
 import ApplicantSettings from './pages/applicant/ApplicantSettings'
 
 import Sidebar from './context/Sidebar';
+import StaffShell from './components/StaffShell'
 import Dashboard from './pages/Dashboard';
 import SubmitApplication from './pages/SubmitApplication';
 import ApplicationsList from './pages/ApplicationsList';
@@ -25,6 +28,13 @@ import Parcels from './pages/Parcels';
 import StaffConsole from './pages/StaffConsole';
 import Certificates from './pages/Certificates';
 import './global.css';
+import NavBar from './components/NavBar'
+import { useLocation } from 'react-router-dom'
+import RegisterApplicant from './pages/Auth/RegisterApplicant'
+import LoginApplicant from './pages/Auth/LoginApplicant'
+import ApplicantLayout from './pages/applicant/ApplicantLayout'
+import About from './pages/About'
+import RequireStaff from './components/RequireStaff'
 
 
 /*
@@ -75,7 +85,8 @@ const NAV = [
 ]
 
 function Shell() {
-  const { staff, logout } = useAuth()
+  const { auth, logout } = useAuth()
+  const staff = auth?.staff
   const navigate          = useNavigate()
 
   if (!staff) return <Navigate to="/login" replace />
@@ -165,10 +176,9 @@ function Shell() {
         {/* Page content */}
         <main className="flex-1 px-10 py-8">
           <Routes>
-            <Route path="/home"          element={<Home />} />
+            <Route path="/home"          element={<StaffHome />} />
             <Route path="/"              element={<SurveyorTasks />} />
             <Route path="/tasks/:taskId" element={<TaskExecution />} />
-            <Route path="/map"           element={<LiveMap />} />
             <Route path="/analytics"     element={<Analytics />} />
             <Route path="*"              element={<Navigate to="/" replace />} />
           </Routes>
@@ -179,11 +189,41 @@ function Shell() {
 }
 
 export default function App() {
+  const location = useLocation()
+  const hideNav = (
+    // hide global NavBar on login/applicant auth pages
+    location?.pathname?.startsWith('/login') ||
+    location?.pathname?.startsWith('/applicant/login') ||
+    location?.pathname?.startsWith('/applicant/register') ||
+    location?.pathname?.startsWith('/applicant') ||
+    // Hide global NavBar on staff pages which render their own header/sidebar
+    location?.pathname?.startsWith('/staff') ||
+    location?.pathname?.startsWith('/applications') ||
+    location?.pathname?.startsWith('/parcels') ||
+    location?.pathname?.startsWith('/certificates') ||
+    location?.pathname?.startsWith('/home') ||
+    location?.pathname?.startsWith('/tasks') ||
+    location?.pathname?.startsWith('/map') ||
+    location?.pathname?.startsWith('/analytics') ||
+    location?.pathname?.startsWith('/dashboard')
+  )
+
   return (
     <AuthProvider>
+      {!hideNav && <NavBar />}
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/applicant" element={<ApplicantDashboard />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/applicant/register" element={<RegisterApplicant />} />
+        <Route path="/applicant/login" element={<LoginApplicant />} />
+        <Route path="/dashboard" element={<RequireStaff><StaffShell><Dashboard /></StaffShell></RequireStaff>} />
+        <Route path="/home" element={<RequireStaff><StaffShell><StaffHome /></StaffShell></RequireStaff>} />
+        <Route path="/" element={<RequireStaff><StaffShell><SurveyorTasks /></StaffShell></RequireStaff>} />
+        <Route path="/tasks/:taskId" element={<RequireStaff><StaffShell><TaskExecution /></StaffShell></RequireStaff>} />
+        <Route path="/applicant" element={<ApplicantHome />} />
+        <Route path="/applicant/home" element={<ApplicantHome />} />
+        <Route path="/applicant/dashboard" element={<ApplicantDashboard />} />
         <Route path="/applicant/create-profile" element={<CreateApplicantProfile />} />
         <Route path="/applicant/applications" element={<ApplicantApplications />} />
         <Route path="/applicant/upload-document" element={<UploadDocument />} />
@@ -192,15 +232,16 @@ export default function App() {
         <Route path="/applicant/timeline" element={<ApplicationTimeline />} />
         <Route path="/applicant/profile" element={<ApplicantProfile />} />
         <Route path="/applicant/settings" element={<ApplicantSettings />} />
-        <Route path="/*"     element={<Shell />} />
-
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/submit" element={<SubmitApplication />} />
-        <Route path="/applications" element={<ApplicationsList />} />
-        <Route path="/applications/:id" element={<ApplicationDetail />} />
-        <Route path="/parcels" element={<Parcels />} />
-        <Route path="/staff" element={<StaffConsole />} />
-        <Route path="/certificates" element={<Certificates />} />
+        <Route path="/submit" element={<ApplicantLayout><SubmitApplication /></ApplicantLayout>} />
+        <Route path="/applications" element={<RequireStaff><StaffShell><ApplicationsList /></StaffShell></RequireStaff>} />
+        <Route path="/applications/:id" element={<RequireStaff><StaffShell><ApplicationDetail /></StaffShell></RequireStaff>} />
+        <Route path="/parcels" element={<RequireStaff><StaffShell><Parcels /></StaffShell></RequireStaff>} />
+        <Route path="/staff" element={<RequireStaff><StaffShell><StaffConsole /></StaffShell></RequireStaff>} />
+        <Route path="/certificates" element={<RequireStaff><StaffShell><Certificates /></StaffShell></RequireStaff>} />
+        <Route path="/analytics" element={<RequireStaff><StaffShell><Analytics /></StaffShell></RequireStaff>} />
+        <Route path="/map" element={<RequireStaff><StaffShell><LiveMap /></StaffShell></RequireStaff>} />
+        <Route path="/*" element={<Shell />} />
+        
 
       </Routes>
     </AuthProvider>

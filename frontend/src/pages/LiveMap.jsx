@@ -111,6 +111,7 @@ export default function LiveMap() {
   const [zoneFilter,   setZoneFilter]   = useState('')
   const [typeFilter,   setTypeFilter]   = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [disputeFilter, setDisputeFilter] = useState('')
 
   useEffect(() => {
     Promise.all([getParcelGeoFeed(), getPendingHeatmap()])
@@ -127,6 +128,7 @@ export default function LiveMap() {
         if (zoneFilter   && p.zone_id             !== zoneFilter)   return false
         if (typeFilter   && p.application_type    !== typeFilter)    return false
         if (statusFilter && p.registration_status !== statusFilter)  return false
+        if (disputeFilter && p.dispute_state       !== disputeFilter) return false
         return true
       })
     }
@@ -186,6 +188,20 @@ export default function LiveMap() {
             <option value="approved">Approved</option>
             <option value="certificate_issued">Certificate Issued</option>
             <option value="closed">Closed</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Dispute State</label>
+          <select
+            value={disputeFilter}
+            onChange={e => setDisputeFilter(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Disputes</option>
+            <option value="none">None</option>
+            <option value="open">Open</option>
+            <option value="pending">Pending</option>
+            <option value="resolved">Resolved</option>
           </select>
         </div>
 

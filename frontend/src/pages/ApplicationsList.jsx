@@ -35,18 +35,43 @@ export default function ApplicationsList() {
   const setFilter = (k, v) => setFilters(f => ({ ...f, [k]: v }));
 
   return (
-    <div>
-      <div className="flex-between mb-16">
-        <div>
-          <div className="page-title">📋 Applications</div>
-          <p className="page-sub">{total} total applications</p>
+    <div className="module1-shell">
+      <section className="module1-hero">
+        <span className="module1-kicker">Module 1 · Land Applications</span>
+        <h1 className="module1-title">Applications management</h1>
+        <p className="module1-subtitle">
+          Review, create, replace, and track land registration applications through the full workflow.
+        </p>
+
+        <div className="module1-stats" style={{ marginTop: 22 }}>
+          <div className="module1-stat">
+            <div className="module1-stat-label">Total</div>
+            <div className="module1-stat-value">{total}</div>
+          </div>
+          <div className="module1-stat">
+            <div className="module1-stat-label">Page</div>
+            <div className="module1-stat-value">{page}/{pages}</div>
+          </div>
+          <div className="module1-stat">
+            <div className="module1-stat-label">Visible</div>
+            <div className="module1-stat-value">{items.length}</div>
+          </div>
+          <div className="module1-stat">
+            <div className="module1-stat-label">Entry Point</div>
+            <div className="module1-stat-value">CRUD</div>
+          </div>
         </div>
-        <Link to="/submit" className="btn btn-primary">+ New Application</Link>
-      </div>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
+          <Link to="/submit" className="btn btn-primary">+ New Application</Link>
+          <Link to="/parcels" className="btn btn-outline">Open Parcels</Link>
+          <Link to="/certificates" className="btn btn-outline">Open Certificates</Link>
+        </div>
+      </section>
 
       {/* Filters */}
-      <div className="card mb-16">
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <div className="module1-card module1-card-accent">
+        <div className="module1-toolbar">
           <div className="form-group" style={{ marginBottom: 0, minWidth: 160 }}>
             <label>Status</label>
             <select value={filters.status} onChange={e => setFilter('status', e.target.value)}>
@@ -77,10 +102,10 @@ export default function ApplicationsList() {
       </div>
 
       {/* Table */}
-      <div className="card">
+      <div className="module1-card">
         {loading ? <div className="loading">Loading…</div> : (
           <div className="table-wrap">
-            <table>
+            <table className="module1-table">
               <thead>
                 <tr>
                   <th>Application ID</th>

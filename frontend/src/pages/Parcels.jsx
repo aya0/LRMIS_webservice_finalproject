@@ -54,22 +54,47 @@ export default function Parcels() {
   };
 
   return (
-    <div>
-      <div className="flex-between mb-16">
-        <div>
-          <div className="page-title">🗺️ Parcels</div>
-          <p className="page-sub">{total} registered parcels</p>
+    <div className="module1-shell">
+      <section className="module1-hero">
+        <span className="module1-kicker">Module 1 · Parcel Registry</span>
+        <h1 className="module1-title">Parcel management</h1>
+        <p className="module1-subtitle">
+          Maintain parcel records, geometry, zoning, and ownership references used by the application workflow and map.
+        </p>
+
+        <div className="module1-stats" style={{ marginTop: 22 }}>
+          <div className="module1-stat">
+            <div className="module1-stat-label">Total Parcels</div>
+            <div className="module1-stat-value">{total}</div>
+          </div>
+          <div className="module1-stat">
+            <div className="module1-stat-label">Form</div>
+            <div className="module1-stat-value">Geometry</div>
+          </div>
+          <div className="module1-stat">
+            <div className="module1-stat-label">Scope</div>
+            <div className="module1-stat-value">Registry</div>
+          </div>
+          <div className="module1-stat">
+            <div className="module1-stat-label">Views</div>
+            <div className="module1-stat-value">List + Create</div>
+          </div>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(s => !s)}>
-          {showForm ? 'Cancel' : '+ Add Parcel'}
-        </button>
-      </div>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
+          <button className="btn btn-primary" onClick={() => setShowForm(s => !s)}>
+            {showForm ? 'Hide Form' : '+ Add Parcel'}
+          </button>
+          <a className="btn btn-outline" href="/map">Open Live Map</a>
+          <a className="btn btn-outline" href="/applications">Open Applications</a>
+        </div>
+      </section>
 
       {msg && <div className="alert alert-success">{msg}</div>}
       {err && <div className="alert alert-error">{err}</div>}
 
       {showForm && (
-        <div className="card mb-16">
+        <div className="module1-card module1-card-accent">
           <div className="card-title">Register New Parcel</div>
           <form onSubmit={handleCreate}>
             <div className="form-row">
@@ -108,10 +133,10 @@ export default function Parcels() {
         </div>
       )}
 
-      <div className="card">
+      <div className="module1-card">
         {loading ? <div className="loading">Loading…</div> : (
           <div className="table-wrap">
-            <table>
+            <table className="module1-table">
               <thead>
                 <tr>
                   <th>Parcel Code</th>

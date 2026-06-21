@@ -66,41 +66,49 @@ export default function StaffConsole() {
   const setFilter = (s) => { setActiveFilter(s); load(s); };
 
   return (
-    <div>
-      <div className="page-title">🏛️ Staff Console</div>
-      <p className="page-sub">Registrar and staff management view</p>
+    <>
+      <section className="mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">Staff Console</h1>
+            <p className="text-slate-500 text-sm">Review applications, approve transitions, issue certificates, and handle registrar tasks.</p>
+          </div>
+          <div className="flex gap-2">
+            <a className="btn btn-primary" href="/applications">Open Applications</a>
+            <a className="btn btn-outline" href="/certificates">Open Certificates</a>
+            <a className="btn btn-outline" href="/parcels">Open Parcels</a>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-6 gap-4 mt-6">
+          {WATCH.map(s => (
+            <button key={s} onClick={() => setFilter(activeFilter === s ? '' : s)} className="col-span-1 bg-white border rounded-xl px-3 py-3 text-left hover:shadow">
+              <div className="text-xs text-slate-400">{s.replace(/_/g,' ')}</div>
+              <div className="text-lg font-semibold">{stats[s] || 0}</div>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {msg && <div className="alert alert-success">{msg}</div>}
       {err && <div className="alert alert-error">{err}</div>}
 
-      {/* Quick stats */}
-      <div className="grid-3 mb-16">
-        {WATCH.map(s => (
-          <div key={s} className="stat-card" style={{ cursor: 'pointer', border: activeFilter === s ? '2px solid var(--primary)' : undefined }}
-            onClick={() => setFilter(activeFilter === s ? '' : s)}>
-            <div className="label">{s.replace(/_/g,' ')}</div>
-            <div className="value blue">{stats[s] || 0}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Active filter indicator */}
       {activeFilter && (
-        <div className="flex-gap mb-16">
+        <div className="flex items-center gap-4 mb-6">
           <span>Filtering: <StatusBadge status={activeFilter} /></span>
           <button className="btn btn-outline btn-sm" onClick={() => setFilter('')}>Clear filter</button>
         </div>
       )}
 
-      {/* Applications table */}
-      <div className="card">
-        <div className="flex-between mb-16">
-          <div className="card-title" style={{marginBottom:0}}>Applications {activeFilter ? `— ${activeFilter}` : '(Active)'}</div>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-lg font-semibold">Applications {activeFilter ? `— ${activeFilter}` : '(Active)'}</div>
           <button className="btn btn-outline btn-sm" onClick={() => load()}>↻ Refresh</button>
         </div>
+
         {loading ? <div className="loading">Loading…</div> : (
           <div className="table-wrap">
-            <table>
+            <table className="module1-table w-full">
               <thead>
                 <tr>
                   <th>ID</th>
@@ -117,15 +125,14 @@ export default function StaffConsole() {
                   ? <tr><td colSpan={7} className="empty">No applications in this category.</td></tr>
                   : items.map(app => (
                     <tr key={app.id}>
-                      <td><Link to={`/applications/${app.application_id}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>{app.application_id}</Link></td>
-                      <td style={{ fontSize: '0.82rem' }}>{app.application_type?.replace(/_/g,' ')}</td>
+                      <td><Link to={`/applications/${app.application_id}`} className="text-blue-600 font-semibold">{app.application_id}</Link></td>
+                      <td className="text-sm">{app.application_type?.replace(/_/g,' ')}</td>
                       <td>{app.parcel_ref?.zone_id}</td>
-                      <td><span style={{ fontWeight: 600, fontSize: '0.82rem', color: app.priority === 'urgent' ? 'var(--danger)' : app.priority === 'high' ? 'var(--warning)' : 'inherit' }}>{app.priority}</span></td>
+                      <td><span className={`font-semibold text-sm ${app.priority === 'urgent' ? 'text-red-600' : app.priority === 'high' ? 'text-yellow-600' : ''}`}>{app.priority}</span></td>
                       <td><StatusBadge status={app.status} /></td>
-                      <td style={{ fontSize: '0.82rem' }}>{app.timestamps?.submitted_at ? new Date(app.timestamps.submitted_at).toLocaleDateString() : '-'}</td>
+                      <td className="text-sm">{app.timestamps?.submitted_at ? new Date(app.timestamps.submitted_at).toLocaleDateString() : '-'}</td>
                       <td>
-                        <div className="flex-gap">
-                          {/* Show relevant actions per status */}
+                        <div className="flex gap-2">
                           {app.status === 'submitted' && (
                             <button className="btn btn-primary btn-sm" onClick={() => quickTransition(app.application_id, 'pre_checked')}>Pre-check ✓</button>
                           )}
@@ -155,6 +162,6 @@ export default function StaffConsole() {
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
