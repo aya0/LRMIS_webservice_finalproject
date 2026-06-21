@@ -9,6 +9,8 @@ from models.survey_task import (
 )
 from models.survey_report import SurveyReportCreate, SurveyReportOut, RegistrarReviewRequest
 from services.assignment import find_best_surveyor
+from services.workflow import build_workflow_field, validate_transition, get_timestamp_field_for_state
+from services.logger import log_event, update_kpi
 from routes.staff import require_staff
 
 router = APIRouter()
@@ -235,6 +237,21 @@ def registrar_review(application_id: str, body: RegistrarReviewRequest,
     if not task:
         raise HTTPException(status_code=404, detail="No survey task found for this application.")
 
+    application = db.land_applications.find_one({"application_id": application_id})
+    if not application:
+        raise HTTPException(status_code=404, detail="No land application found for this survey review.")
+
+    decision_to_state = {
+        "approved": "legal_review",
+        "rejected": "rejected",
+        "needs_revision": "missing_documents",
+    }
+    target_state = decision_to_state[body.decision]
+
+    validation_error = validate_transition(application, target_state)
+    if validation_error:
+        raise HTTPException(status_code=400, detail=validation_error)
+
     # Advance milestone to registrar_reviewed
     milestone_doc = {
         "type": SurveyMilestoneType.registrar_reviewed,
@@ -260,17 +277,40 @@ def registrar_review(application_id: str, body: RegistrarReviewRequest,
         upsert=True,
     )
 
-    _log_event(
-        application_id=application_id,
-        event_type="registrar_reviewed",
-        actor_type="registrar",
-        actor_id=body.registrar_id,
-        meta={"decision": body.decision},
+    update_fields = {
+        "status": target_state,
+        "workflow": build_workflow_field(target_state),
+        "timestamps.updated_at": body.reviewed_at,
+    }
+
+    ts_field = get_timestamp_field_for_state(target_state)
+    if ts_field:
+        update_fields[f"timestamps.{ts_field}"] = body.reviewed_at
+
+    if body.decision == "rejected":
+        update_fields["rejection_reason"] = body.decision_notes
+    elif body.decision == "needs_revision":
+        update_fields["hold_reason"] = body.decision_notes
+
+    db.land_applications.update_one(
+        {"application_id": application_id},
+        {
+            "$set": update_fields,
+            "$push": {"internal.notes": f"[registrar_review:{body.decision}] {body.decision_notes}"},
+        },
     )
 
-    # PLACEHOLDER (Student 1): After registrar approves the survey review,
-    # Student 1's workflow engine should transition application status from
-    # "surveyed" → "legal_review". Coordinate with Student 1 on this handoff.
+    if target_state == "legal_review" and application.get("timestamps", {}).get("survey_required_at"):
+        delta = (body.reviewed_at - application["timestamps"]["survey_required_at"]).days
+        update_kpi(application_id, "survey_delay_days", delta)
+
+    log_event(
+        application_id=application_id,
+        event_type=target_state,
+        actor_type="registrar",
+        actor_id=body.registrar_id,
+        meta={"decision": body.decision, "notes": body.decision_notes},
+    )
 
     return {
         "application_id": application_id,
@@ -279,8 +319,7 @@ def registrar_review(application_id: str, body: RegistrarReviewRequest,
         "decision_notes": body.decision_notes,
         "reviewed_at":    body.reviewed_at,
         "message":        (
-            "Survey review recorded. "
-            "PLACEHOLDER: Student 1 must update application status to 'legal_review' or 'rejected'."
+            f"Survey review recorded. Application moved to '{target_state}'."
         )
     }
 

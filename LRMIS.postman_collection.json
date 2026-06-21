@@ -1,0 +1,816 @@
+{
+  "info": {
+    "_postman_id": "9f3f7a51-2c3e-4b1a-9a1f-0d8a4d62f0f1",
+    "name": "LRMIS Main Endpoints",
+    "description": "Postman collection for the main LRMIS backend endpoints: applications, parcels, staff, survey workflow, applicant portal, analytics, and geofeeds.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "staffId",
+      "value": ""
+    },
+    {
+      "key": "staffToken",
+      "value": ""
+    },
+    {
+      "key": "applicantId",
+      "value": ""
+    },
+    {
+      "key": "applicationId",
+      "value": ""
+    },
+    {
+      "key": "parcelId",
+      "value": ""
+    },
+    {
+      "key": "certificateId",
+      "value": ""
+    },
+    {
+      "key": "surveyTaskId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Applications",
+      "item": [
+        {
+          "name": "POST Create Application",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"application_type\": \"ownership_transfer\",\n  \"priority\": \"normal\",\n  \"applicant_ref\": {\n    \"applicant_id\": \"{{applicantId}}\",\n    \"applicant_type\": \"citizen\",\n    \"submitted_by_representative\": false\n  },\n  \"parcel_ref\": {\n    \"parcel_id\": \"{{parcelId}}\",\n    \"parcel_number\": \"145\",\n    \"block_number\": \"12\",\n    \"basin_number\": \"3\",\n    \"zone_id\": \"ZONE-RM-01\"\n  },\n  \"description\": \"Ownership transfer sample application\",\n  \"tags\": [\"demo\", \"postman\"],\n  \"required_documents\": [\n    {\n      \"document_type\": \"title_deed\",\n      \"required\": true,\n      \"status\": \"pending_review\"\n    }\n  ],\n  \"idempotency_key\": \"demo-create-001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", ""]
+            }
+          }
+        },
+        {
+          "name": "GET List Applications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/?page=1&page_size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", ""],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Application By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}"]
+            }
+          }
+        },
+        {
+          "name": "PATCH Update Application",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": \"high\",\n  \"description\": \"Updated demo description\",\n  \"tags\": [\"updated\", \"demo\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}"]
+            }
+          }
+        },
+        {
+          "name": "PATCH Transition Application",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_state\": \"pre_checked\",\n  \"actor_id\": \"{{staffId}}\",\n  \"actor_type\": \"staff\",\n  \"note\": \"Pre-check completed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/transition",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "transition"]
+            }
+          }
+        },
+        {
+          "name": "POST Hold Application",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Missing ownership paper\",\n  \"actor_id\": \"{{staffId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/hold",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "hold"]
+            }
+          }
+        },
+        {
+          "name": "POST Reject Application",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Invalid supporting documents\",\n  \"actor_id\": \"{{staffId}}\",\n  \"legal_basis\": \"Document mismatch\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "reject"]
+            }
+          }
+        },
+        {
+          "name": "POST Issue Certificate",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/certificate?issued_by={{staffId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "certificate"],
+              "query": [
+                { "key": "issued_by", "value": "{{staffId}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Application Certificate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/certificate",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "certificate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Parcels",
+      "item": [
+        {
+          "name": "POST Create Parcel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parcel_code\": \"ZONE-RM-01-B12-P145\",\n  \"parcel_number\": \"145\",\n  \"block_number\": \"12\",\n  \"basin_number\": \"3\",\n  \"zone_id\": \"ZONE-RM-01\",\n  \"area_sqm\": 850.5,\n  \"land_use\": \"residential\",\n  \"geometry\": {\n    \"type\": \"Polygon\",\n    \"coordinates\": [[[35.2001,31.9021],[35.2015,31.9021],[35.2015,31.9030],[35.2001,31.9030],[35.2001,31.9021]]]\n  },\n  \"address_hint\": \"Ramallah - Al Tireh\",\n  \"current_owner_refs\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/parcels/",
+              "host": ["{{baseUrl}}"],
+              "path": ["parcels", ""]
+            }
+          }
+        },
+        {
+          "name": "GET List Parcels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/parcels/?zone_id=ZONE-RM-01&page=1&page_size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["parcels", ""],
+              "query": [
+                { "key": "zone_id", "value": "ZONE-RM-01" },
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Parcel By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/parcels/{{parcelId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["parcels", "{{parcelId}}"]
+            }
+          }
+        },
+        {
+          "name": "PATCH Update Parcel",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"area_sqm\": 900.0,\n  \"address_hint\": \"Updated parcel location\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/parcels/{{parcelId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["parcels", "{{parcelId}}"]
+            }
+          }
+        },
+        {
+          "name": "DELETE Parcel",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/parcels/{{parcelId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["parcels", "{{parcelId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff and Survey",
+      "item": [
+        {
+          "name": "POST Staff Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"staff_code\": \"SURV-001\",\n  \"password\": \"demo-pass\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "GET Staff Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/staff/{{staffId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["staff", "{{staffId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET List Staff",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/staff/?role=surveyor&active=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["staff", ""],
+              "query": [
+                { "key": "role", "value": "surveyor" },
+                { "key": "active", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Auto Assign Surveyor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/auto-assign-surveyor",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "auto-assign-surveyor"]
+            }
+          }
+        },
+        {
+          "name": "PATCH Survey Milestone",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"milestone\": \"visit_scheduled\",\n  \"by\": \"{{staffId}}\",\n  \"meta\": {\n    \"scheduled_date\": \"2026-06-25\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/survey-milestone",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "survey-milestone"]
+            }
+          }
+        },
+        {
+          "name": "POST Survey Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_title\": \"Boundary survey report\",\n  \"surveyor_id\": \"{{staffId}}\",\n  \"application_id\": \"{{applicationId}}\",\n  \"parcel_id\": \"{{parcelId}}\",\n  \"observations\": \"Boundary verified with no major encroachment.\",\n  \"boundary_confirmed\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/survey-report",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "survey-report"]
+            }
+          }
+        },
+        {
+          "name": "PATCH Registrar Review",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"approved\",\n  \"registrar_id\": \"{{staffId}}\",\n  \"reviewed_at\": \"2026-06-22T10:00:00Z\",\n  \"decision_notes\": \"All documents verified.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/registrar-review",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "registrar-review"]
+            }
+          }
+        },
+        {
+          "name": "GET Survey Task By Application",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/survey-task",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "survey-task"]
+            }
+          }
+        },
+        {
+          "name": "GET Survey Task By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/survey-tasks/{{surveyTaskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["survey-tasks", "{{surveyTaskId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET Surveyor Tasks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/survey-tasks/?surveyor_id={{staffId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["survey-tasks", ""],
+              "query": [
+                { "key": "surveyor_id", "value": "{{staffId}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Add Field Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Site visit completed.\",\n  \"added_by\": \"{{staffId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/survey-tasks/{{surveyTaskId}}/field-notes",
+              "host": ["{{baseUrl}}"],
+              "path": ["survey-tasks", "{{surveyTaskId}}", "field-notes"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Applicant Portal",
+      "item": [
+        {
+          "name": "POST Register Applicant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Alaa Nasser\",\n  \"national_id\": \"407123456\",\n  \"contact\": {\n    \"email\": \"applicant@example.com\",\n    \"phone\": \"+970599111111\"\n  },\n  \"address\": {\n    \"city\": \"Ramallah\",\n    \"neighborhood\": \"Al-Masyoun\",\n    \"zone_id\": \"ZONE-RM-01\"\n  },\n  \"applicant_type\": \"citizen\",\n  \"preferred_language\": \"ar\",\n  \"password\": \"demo-pass\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applicants/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["applicants", "register"]
+            }
+          }
+        },
+        {
+          "name": "POST Applicant Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"national_id\": \"407123456\",\n  \"password\": \"demo-pass\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applicants/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["applicants", "login"]
+            }
+          }
+        },
+        {
+          "name": "GET Applicant By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applicants/{{applicantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["applicants", "{{applicantId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET Applicant Applications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applicants/{{applicantId}}/applications",
+              "host": ["{{baseUrl}}"],
+              "path": ["applicants", "{{applicantId}}", "applications"]
+            }
+          }
+        },
+        {
+          "name": "POST Applicant Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicant_id\": \"{{applicantId}}\",\n  \"comment\": \"Please process this application quickly.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/comments",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "comments"]
+            }
+          }
+        },
+        {
+          "name": "POST Applicant Objection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicant_id\": \"{{applicantId}}\",\n  \"reason\": \"Boundary dispute\",\n  \"status\": \"open\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/objections",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "objections"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics and Map",
+      "item": [
+        {
+          "name": "GET KPI Snapshot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/kpis",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "kpis"]
+            }
+          }
+        },
+        {
+          "name": "GET Applications By Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/applications-by-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "applications-by-status"]
+            }
+          }
+        },
+        {
+          "name": "GET Applications By Zone",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/applications-by-zone",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "applications-by-zone"]
+            }
+          }
+        },
+        {
+          "name": "GET Processing Time",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/processing-time",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "processing-time"]
+            }
+          }
+        },
+        {
+          "name": "GET Surveyors Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/surveyors",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "surveyors"]
+            }
+          }
+        },
+        {
+          "name": "GET Registrars Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/registrars",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "registrars"]
+            }
+          }
+        },
+        {
+          "name": "GET Parcel Geo Feed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/geofeeds/parcels",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "geofeeds", "parcels"]
+            }
+          }
+        },
+        {
+          "name": "GET Pending Heatmap",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/geofeeds/pending-heatmap",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "geofeeds", "pending-heatmap"]
+            }
+          }
+        },
+        {
+          "name": "GET Certificates Per Month",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/certificates-per-month",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "certificates-per-month"]
+            }
+          }
+        },
+        {
+          "name": "GET Objection Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/objections",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "objections"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Certificates",
+      "item": [
+        {
+          "name": "GET Certificate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/certificates/{{certificateId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["certificates", "{{certificateId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET Verify Certificate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/certificates/{{certificateId}}/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["certificates", "{{certificateId}}", "verify"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

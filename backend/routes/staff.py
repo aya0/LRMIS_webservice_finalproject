@@ -3,27 +3,48 @@ from typing import Optional
 from datetime import datetime
 from bson import ObjectId
 from passlib.context import CryptContext
+from passlib.hash import pbkdf2_sha256
 import database as db
 from models.staff import StaffCreate, StaffOut, LoginRequest
+from auth import create_access_token, decode_access_token
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256", "bcrypt"],
+    default="pbkdf2_sha256",
+    deprecated="auto",
+)
 
 router = APIRouter()
 
 
 # ── Simple staff-only access control (spec: "basic access control") ───────────
-def require_staff(x_staff_id: Optional[str] = Header(None)):
+def require_staff(authorization: Optional[str] = Header(None), x_staff_id: Optional[str] = Header(None)):
     """
-    Basic access control for staff-only endpoints.
-    Clients must send X-Staff-Id header with a valid staff member id.
-    PLACEHOLDER: replace with proper JWT auth when the team agrees on auth strategy.
+    Require a valid staff identity. Prefer Authorization bearer token; fall back to X-Staff-Id for backwards compatibility.
     """
-    if not x_staff_id:
-        raise HTTPException(status_code=401, detail="X-Staff-Id header required for staff endpoints.")
-    staff = db.staff_members.find_one({"_id": ObjectId(x_staff_id)})
-    if not staff:
-        raise HTTPException(status_code=403, detail="Staff member not found.")
-    return staff
+    # 1) Try Authorization: Bearer <token>
+    if authorization and authorization.lower().startswith('bearer '):
+        token = authorization.split(None, 1)[1]
+        try:
+            payload = decode_access_token(token)
+            staff_id = payload.get('staff_id')
+            if not staff_id:
+                raise HTTPException(status_code=401, detail="Invalid token payload")
+            staff = db.staff_members.find_one({"_id": ObjectId(staff_id)})
+            if not staff:
+                raise HTTPException(status_code=403, detail="Staff member not found")
+            return staff
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # 2) Fallback: X-Staff-Id header (existing behavior)
+    if x_staff_id:
+        staff = db.staff_members.find_one({"_id": ObjectId(x_staff_id)})
+        if not staff:
+            raise HTTPException(status_code=403, detail="Staff member not found.")
+        return staff
+
+    raise HTTPException(status_code=401, detail="Authorization required")
 
 
 def _serialize(doc: dict) -> dict:
@@ -37,7 +58,7 @@ def _serialize(doc: dict) -> dict:
 def create_staff(body: StaffCreate):
     """
     Create a surveyor or registrar staff account.
-    Password is hashed with bcrypt before storage — never stored in plain text.
+    Password is hashed securely before storage — never stored in plain text.
     staff_code must be unique (enforced by DB index).
     """
     existing = db.staff_members.find_one({"staff_code": body.staff_code})
@@ -69,7 +90,11 @@ def login(body: LoginRequest):
     if not staff:
         raise HTTPException(status_code=401, detail="Invalid staff code or password.")
 
-    if not pwd_context.verify(body.password, staff.get("password_hash", "")):
+    password_hash = staff.get("password_hash", "")
+    if not (
+        (password_hash and pwd_context.verify(body.password, password_hash))
+        or (password_hash and pbkdf2_sha256.verify(body.password, password_hash))
+    ):
         raise HTTPException(status_code=401, detail="Invalid staff code or password.")
 
     if not staff.get("active", True):
@@ -77,7 +102,10 @@ def login(body: LoginRequest):
 
     staff = _serialize(staff)
     staff.pop("password_hash", None)   # Never return hash to client
-    return staff
+
+    # Create demo access token (contains staff id)
+    token = create_access_token({"staff_id": staff.get("id")})
+    return {"access_token": token, "token_type": "bearer", "staff": staff}
 
 
 # ── GET /staff/{staff_id} ─────────────────────────────────────────────────────

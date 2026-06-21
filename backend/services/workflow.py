@@ -5,6 +5,9 @@ Defines all valid transitions and the validation rules each requires.
 
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
+from bson import ObjectId
+
+from database import parcels, survey_reports
 
 # ── Allowed transitions ────────────────────────────────────────────────────────
 # Maps current_state -> list of valid next states
@@ -63,21 +66,40 @@ def validate_transition(app: dict, target_state: str) -> Optional[str]:
         parcel = app.get("parcel_ref", {})
         if not applicant.get("applicant_id"):
             return "Cannot move to pre_checked: applicant_id is missing."
-        if not all([parcel.get("parcel_number"), parcel.get("zone_id"),
-                    parcel.get("block_number"), parcel.get("basin_number")]):
+        if not all([
+            parcel.get("parcel_number"),
+            parcel.get("zone_id"),
+            parcel.get("block_number"),
+            parcel.get("basin_number"),
+        ]):
             return "Cannot move to pre_checked: parcel information is incomplete."
+
+        parcel_id = parcel.get("parcel_id")
+        if parcel_id:
+            parcel_doc = _find_parcel_doc(parcel_id)
+            if not parcel_doc:
+                return "Cannot move to pre_checked: linked parcel record was not found."
 
     # ── Rule: pre_checked -> survey_required ──────────────────────────────────
     if target_state == "survey_required":
         parcel = app.get("parcel_ref", {})
-        if not parcel.get("parcel_id") and not parcel.get("zone_id"):
-            return "Cannot move to survey_required: parcel location (parcel_id or zone_id) is not valid."
+        parcel_id = parcel.get("parcel_id")
+        if not parcel_id:
+            return "Cannot move to survey_required: parcel_id is missing."
+
+        parcel_doc = _find_parcel_doc(parcel_id)
+        if not parcel_doc:
+            return "Cannot move to survey_required: linked parcel record was not found."
+
+        geometry = parcel_doc.get("geometry") or {}
+        if geometry.get("type") != "Polygon" or not geometry.get("coordinates"):
+            return "Cannot move to survey_required: parcel location geometry is invalid."
 
     # ── Rule: survey_required -> surveyed ─────────────────────────────────────
     if target_state == "surveyed":
-        assignment = app.get("assignment", {})
-        if not assignment.get("assigned_surveyor_id"):
-            return "Cannot move to surveyed: no survey report exists (no surveyor assigned)."
+        application_id = app.get("application_id")
+        if not application_id or not survey_reports.find_one({"application_id": application_id}):
+            return "Cannot move to surveyed: no survey report exists."
 
     # ── Rule: surveyed -> legal_review ────────────────────────────────────────
     if target_state == "legal_review":
@@ -115,3 +137,16 @@ def build_workflow_field(current_state: str) -> dict:
 
 def get_timestamp_field_for_state(state: str) -> Optional[str]:
     return STATE_TIMESTAMPS.get(state)
+
+
+def _find_parcel_doc(parcel_id):
+    if not parcel_id:
+        return None
+
+    query = {"_id": parcel_id}
+    if isinstance(parcel_id, str):
+        try:
+            query = {"_id": ObjectId(parcel_id)}
+        except Exception:
+            query = {"parcel_code": parcel_id}
+    return parcels.find_one(query)

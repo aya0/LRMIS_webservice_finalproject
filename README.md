@@ -1,4 +1,302 @@
-# LRMIS — Land Registration Management Information System
+# LRMIS - Land Registration Management Information System
+
+COMP4382 Final Project - 2025/2026
+
+## Team & Module Ownership
+
+| Module | Student | ID | Responsibility |
+|--------|---------|-----|----------------|
+| Module 1 — Land Application Management | Aya Nasser | 1220020 | Applications, workflow state machine, parcels, certificates |
+| Module 2 — Applicant Portal | [STUDENT 2 NAME] | [ID] | Applicant profiles, document upload, objections, status tracking |
+| **Module 3 — Surveyors, Registrar & Assignment** | **Tala** | **1220536** | Staff management, auto-assignment engine, survey milestones, registrar review |
+| Module 4 — Analytics & Map | All three students | — | Dashboards, live map, geospatial queries, aggregation pipelines |
+
+---
+
+
+## Overview
+
+LRMIS is a land registration workflow system with a FastAPI backend, a React frontend, and MongoDB storage.
+
+The repository contains:
+
+- `backend/` - API, workflow logic, and MongoDB collections
+- `frontend/` - Vite + React user interface
+- `presentation/` - presentation notes and supporting material
+
+## Features
+
+- Land application submission and workflow transitions
+- Applicant profiles, comments, objections, and document tracking
+- Surveyor assignment, survey milestones, survey reports, and registrar review
+- Analytics dashboard endpoints and live parcel map geofeeds
+
+## Requirements
+
+- Python 3.11 recommended
+- Node.js 18 or newer
+- MongoDB 6 or newer, local or Atlas
+
+## Setup Instructions
+
+### Backend
+
+1. Open a terminal in the `backend/` folder.
+
+```bash
+cd backend
+python3 -m venv .env
+source .env/bin/activate
+pip install -r requirements.txt
+```
+
+2. Create `backend/.env` with your environment variables.
+
+3. Start the API.
+
+```bash
+uvicorn main:app --reload
+```
+
+The backend runs at `http://localhost:8000`.
+Swagger docs are available at `http://localhost:8000/docs`.
+
+### Frontend
+
+1. Open a second terminal in the `frontend/` folder.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend runs at `http://localhost:5173`.
+
+## Run Instructions
+
+Recommended local run order:
+
+1. Start MongoDB.
+2. Start the backend API from `backend/`.
+3. Seed the demo data from `backend/`.
+4. Start the frontend from `frontend/`.
+5. Open `http://localhost:5173` in your browser.
+
+Seed the demo database with:
+
+```bash
+cd backend
+python TestDataset.py
+```
+
+## Environment Variables
+
+Create `backend/.env` with these values:
+
+| Variable | Description | Example |
+|---|---|---|
+| `MONGODB_URI` | MongoDB connection string | `mongodb://localhost:27017` |
+| `DATABASE_NAME` | Database name | `lrmis_db` |
+| `SECRET_KEY` | Secret used for token generation | any strong random string |
+
+## Packages
+
+### Backend
+
+From `backend/requirements.txt`:
+
+- `fastapi` - API framework
+- `uvicorn[standard]` - ASGI server
+- `pymongo` - MongoDB driver
+- `pydantic` - validation models
+- `python-dotenv` - environment variable loading
+- `passlib[bcrypt]` - password hashing
+- `python-multipart` - form and file upload support
+
+### Frontend
+
+From `frontend/package.json`:
+
+- `react` and `react-dom` - UI framework
+- `react-router-dom` - routing
+- `axios` - HTTP client
+- `leaflet` and `react-leaflet` - map rendering
+- `leaflet.markercluster` - clustered map markers
+- `recharts` - charts and dashboard visualizations
+- `vite` - frontend dev server and build tool
+- `tailwindcss`, `postcss`, and `autoprefixer` - styling pipeline
+
+## MongoDB Indexes
+
+Indexes are created automatically by `backend/database.py` when the app starts.
+
+### Land applications
+
+- `application_id` unique
+- `status`
+- `application_type`
+- `parcel_ref.parcel_number`
+- `parcel_ref.zone_id`
+- `timestamps.submitted_at`
+- `idempotency_key` sparse
+
+### Parcels
+
+- `parcel_code` unique
+- `geometry` geospatial index
+- `zone_id`
+- `parcel_number`
+
+### Certificates
+
+- `certificate_id` unique
+- `application_id`
+
+### Staff and survey tasks
+
+- `staff_code` unique
+- `survey_tasks.application_id`
+- `survey_tasks.assigned_surveyor_id`
+- `survey_tasks.status`
+- `staff_members.role`
+- `staff_members.coverage.zone_ids`
+
+### Applicant portal
+
+- `applicants.identity.national_id` unique sparse
+- `applicants.identity.registration_number` unique sparse
+- `application_documents.application_id`
+- `application_documents.applicant_id`
+- `applicant_comments.application_id`
+- `applicant_comments.applicant_id`
+- `objections.application_id`
+- `objections.applicant_id`
+
+## Sample Users / Seed Data
+
+The repository includes a deterministic seed script at `backend/TestDataset.py`.
+
+Run it from `backend/`:
+
+```bash
+python TestDataset.py
+```
+
+What it seeds:
+
+- 100 applicants
+- 100 parcels
+- 100 land applications
+- 12 staff accounts
+- survey tasks, survey reports, documents, comments, objections, performance logs, and certificates
+
+Demo staff accounts:
+
+- Surveyors: `SURV-001` through `SURV-008`
+- Registrars: `REG-001` through `REG-004`
+- Password for all seeded staff: `demo-pass`
+
+Useful demo records:
+
+- Application IDs: `LRMIS-2026-0001` through `LRMIS-2026-0100`
+- Surveyor login for demos: `SURV-001`
+- Registrar login for demos: `REG-001`
+
+## API Endpoints
+
+### Core application workflow
+
+- `POST /applications/`
+- `GET /applications/{application_id}`
+- `PATCH /applications/{application_id}`
+- `PUT /applications/{application_id}`
+- `DELETE /applications/{application_id}`
+- `PATCH /applications/{application_id}/transition`
+- `POST /applications/{application_id}/hold`
+- `POST /applications/{application_id}/reject`
+- `POST /applications/{application_id}/certificate`
+- `GET /applications/{application_id}/certificate`
+
+### Staff and survey workflow
+
+- `POST /staff/`
+- `GET /staff/`
+- `GET /staff/{staff_id}`
+- `POST /applications/{application_id}/auto-assign-surveyor`
+- `PATCH /applications/{application_id}/survey-milestone`
+- `POST /applications/{application_id}/survey-report`
+- `PATCH /applications/{application_id}/registrar-review`
+- `GET /applications/{application_id}/survey-task`
+- `GET /survey-tasks/`
+- `POST /survey-tasks/{id}/field-notes`
+
+### Applicant portal
+
+- `POST /applicants/`
+- `POST /applicants/register`
+- `POST /applicants/login`
+- `GET /applicants/{applicant_id}`
+- `GET /applicants/{applicant_id}/applications`
+- `POST /applications/{application_id}/comments`
+- `POST /applications/{application_id}/objections`
+
+### Analytics and geofeeds
+
+- `GET /analytics/kpis`
+- `GET /analytics/by-status` and `GET /analytics/applications-by-status`
+- `GET /analytics/by-zone` and `GET /analytics/applications-by-zone`
+- `GET /analytics/processing-time`
+- `GET /analytics/surveyors`
+- `GET /analytics/registrars`
+- `GET /analytics/certs-per-month` and `GET /analytics/certificates-per-month`
+- `GET /analytics/objections` and `GET /analytics/objection-stats`
+- `GET /analytics/parcel-geo-feed` and `GET /analytics/geofeeds/parcels`
+- `GET /analytics/pending-heatmap` and `GET /analytics/geofeeds/pending-heatmap`
+
+## Workflow Notes
+
+- Applications start at `submitted`.
+- Staff can move them through `pre_checked`, `survey_required`, `surveyed`, `legal_review`, `approved`, `certificate_issued`, and `closed`.
+- Objections can move an application to `under_objection`.
+- The survey task milestone order is:
+
+```text
+assigned -> visit_scheduled -> arrived_on_site -> survey_started -> survey_completed -> report_uploaded -> registrar_reviewed
+```
+
+## Quick Start
+
+1. Start MongoDB.
+2. Start the backend:
+
+```bash
+cd backend
+source .env/bin/activate
+uvicorn main:app --reload
+```
+
+3. Seed data:
+
+```bash
+cd backend
+python TestDataset.py
+```
+
+4. Start the frontend:
+
+```bash
+cd frontend
+npm run dev
+```
+
+5. Open `http://localhost:5173`.
+
+## Notes
+
+- The frontend reads analytics and geofeeds from the backend API.
+- The seed script clears and reloads the demo collections, so rerunning it gives a consistent test dataset.
+- If you change any database indexes, restart the backend so `create_indexes()` runs again.# LRMIS — Land Registration Management Information System
 
 COMP4382 Final Project — 2025/2026
 
@@ -25,6 +323,12 @@ This module is responsible for everything between `survey_required` and `legal_r
 - Uploading survey report metadata
 - Registrar review and decision recording
 
+Module 1 coverage is also complete for the land administration core:
+- Application CRUD: create, read, list, update, delete
+- Workflow state machine: strict transitions, hold, reject, certificate issuance
+- Parcel management: create, read, list, update, delete with reference checks
+- Certificate issuance and verification: create certificate, view certificate, verify QR-style link
+
 All integration points with other modules are marked `# PLACEHOLDER` in the code.
 
 ---
@@ -32,7 +336,9 @@ All integration points with other modules are marked `# PLACEHOLDER` in the code
 ## Setup Instructions
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.11 (recommended) — do NOT use Python 3.14; some binary dependencies (pydantic-core) require <= 3.12
+- Node.js 18+
+- MongoDB (local or Atlas)
 - Node.js 18+
 - MongoDB (local or Atlas)
 
@@ -83,7 +389,6 @@ Frontend runs at: http://localhost:5173
 - `pydantic` — data validation
 - `python-dotenv` — environment variables
 - `passlib[bcrypt]` — password hashing
-- `python-jose[cryptography]` — JWT tokens
 - `python-multipart` — file upload support
 
 ### Frontend (`frontend/package.json`)
@@ -118,38 +423,20 @@ db.performance_logs.create_index("application_id")
 
 ## Sample Users / Seed Data
 
-To insert sample data, run:
+Use the built-in test dataset runner at `backend/TestDataset.py` to populate demo collections for local testing and demos.
+
+Run from the `backend/` folder:
 
 ```bash
 cd backend
-python seed.py    # (create this file with sample staff if needed)
+python TestDataset.py
 ```
 
-**Sample surveyor:**
-```json
-{
-  "staff_code": "SURV-RM-04",
-  "name": "Survey Team A",
-  "role": "surveyor",
-  "department": "Cadastral Survey",
-  "skills": ["boundary_survey", "parcel_subdivision", "gps_mapping"],
-  "coverage": {
-    "zone_ids": ["ZONE-RM-01", "ZONE-RM-02"]
-  },
-  "schedule": {
-    "timezone": "Asia/Jerusalem",
-    "shifts": [
-      {"day": "Mon", "start": "08:00", "end": "16:00"},
-      {"day": "Tue", "start": "08:00", "end": "16:00"},
-      {"day": "Wed", "start": "08:00", "end": "16:00"}
-    ],
-    "on_call": false
-  },
-  "workload": {"active_tasks": 0, "max_tasks": 10},
-  "contacts": {"phone": "+970599111111", "email": "survey_a@example.com"},
-  "active": true
-}
-```
+The script creates indexes and inserts a set of demo documents covering core collections:
+- `applicants`, `parcels`, `land_applications`, `staff_members`, `survey_tasks`, `survey_reports`, `application_documents`, `applicant_comments`, `objections`, `certificates`, `performance_logs`.
+- Demo staff: `SURV-001` (surveyor) and `REG-001` (registrar), both with password `demo-pass`.
+
+You can now use `APP-001` and `SURV-001` for end-to-end testing of assignment, milestones, and map rendering. The seeded demo users have password `demo-pass`.
 
 ---
 
@@ -196,14 +483,72 @@ assigned → visit_scheduled → arrived_on_site → survey_started
 
 ---
 
-## Run Instructions (full stack)
+## Quick Start — local demo
+
+1. Ensure MongoDB is running locally or set `MONGODB_URI` in `backend/.env`.
+
+2. Install backend dependencies and start the API (Terminal 1):
 
 ```bash
-# Terminal 1 — backend
-cd backend && uvicorn main:app --reload
-
-# Terminal 2 — frontend
-cd frontend && npm run dev
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
 ```
 
-Then open http://localhost:5173
+3. Seed demo data (from repo root):
+
+```bash
+python3 scripts/seed_demo_data.py
+```
+
+4. Start the frontend (Terminal 2):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+5. Open the frontend at http://localhost:5173 and use the Login page to select a staff member (for demo use `SURV-001`). Use application id `APP-001` to view the seeded task.
+
+## Home Pages
+
+- `/` — System landing page with project overview and portal entry buttons.
+- `/home` — Staff home page with quick actions for tasks, map, analytics, and admin pages.
+- `/applicant` and `/applicant/home` — Applicant home page with links to profile, applications, uploads, comments, objections, and timeline.
+
+## Architecture & Documentation (summary)
+
+- **Backend**: FastAPI app in the `backend/` folder. Key modules:
+    - `routes/` — API endpoints: `staff`, `survey`, `applications`, `analytics`.
+    - `services/` — business logic (assignment engine, workflow helpers).
+    - `models/` — Pydantic models for request/response validation.
+    - `database.py` — PyMongo client, collection references, `create_indexes()`.
+
+- **Frontend**: React + Vite in `frontend/`.
+    - `src/pages/SurveyorTasks.jsx`, `TaskExecution.jsx`, `LiveMap.jsx`, `Analytics.jsx` implement the UI.
+    - `src/api/api.js` contains axios wrappers for backend endpoints.
+
+- **Integration points / Placeholders**:
+    - `land_applications` and `parcels` collections are owned by Module 1 (Student 1). Module 3 reads them for assignment and map feeds. The seed script provides demo copies for local testing.
+    - Analytics endpoints are implemented under `backend/routes/analytics.py`. If the Group module is a separate service, ensure it exposes the same `GET /analytics/*` endpoints or update `frontend/src/api/api.js` accordingly.
+
+If you want, I can:
+- Add unit tests for the assignment engine and milestone transitions.
+- Replace the placeholder staff login with a minimal JWT demo flow for presentations.
+- Prepare a short slide deck outline and a `presentation/` folder with screenshots and talking points.
+
+## Group Module (Analytics & Geofeeds)
+
+The Group module is implemented in [backend/routes/analytics.py](backend/routes/analytics.py) and exposes read-only aggregation endpoints used by the dashboard and map.
+
+Current endpoints:
+- `GET /analytics/kpis`
+- `GET /analytics/by-status` and `GET /analytics/applications-by-status`
+- `GET /analytics/by-zone` and `GET /analytics/applications-by-zone`
+- `GET /analytics/processing-time`
+- `GET /analytics/surveyors`
+- `GET /analytics/objections` and `GET /analytics/objection-stats`
+- `GET /analytics/certs-per-month` and `GET /analytics/certificates-per-month`
+- `GET /analytics/parcel-geo-feed` and `GET /analytics/geofeeds/parcels`
+- `GET /analytics/pending-heatmap` and `GET /analytics/geofeeds/pending-heatmap`

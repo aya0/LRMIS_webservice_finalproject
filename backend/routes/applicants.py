@@ -1,4 +1,7 @@
 from datetime import datetime
+from passlib.context import CryptContext
+from passlib.hash import pbkdf2_sha256
+from auth import create_access_token
 from typing import Any
 
 from bson import ObjectId
@@ -10,6 +13,12 @@ from models.applicant import ApplicantCreate, ApplicantOut
 from routes.module2_validation import Module2ValidationRoute
 
 router = APIRouter(route_class=Module2ValidationRoute)
+
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256", "bcrypt"],
+    default="pbkdf2_sha256",
+    deprecated="auto",
+)
 
 
 # MODULE 2: Applicant profile endpoints
@@ -80,15 +89,32 @@ def _serialize_value(value: Any) -> Any:
     return value
 
 
+def _nonempty_string(value: Any, fallback: str) -> str:
+    if isinstance(value, str):
+        value = value.strip()
+        if value:
+            return value
+    return fallback
+
+
 def _public_applicant(doc: dict) -> dict:
     identity = doc.get("identity", {})
+    contact = doc.get("contact") or doc.get("contacts") or {}
+    address = doc.get("address") or {}
     return {
         "id": str(doc["_id"]),
         "full_name": doc.get("full_name"),
         "national_id": doc.get("national_id") or identity.get("national_id"),
         "registration_number": doc.get("registration_number") or identity.get("registration_number"),
-        "contact": doc.get("contact", {}),
-        "address": doc.get("address", {}),
+        "contact": {
+            "email": _nonempty_string(contact.get("email"), "unknown@example.com"),
+            "phone": _nonempty_string(contact.get("phone"), "+97000000000"),
+        },
+        "address": {
+            "city": _nonempty_string(address.get("city"), "Ramallah"),
+            "neighborhood": _nonempty_string(address.get("neighborhood"), "Unknown"),
+            "zone_id": _nonempty_string(address.get("zone_id"), "ZONE-UNKNOWN"),
+        },
         "applicant_type": doc.get("applicant_type"),
         "verification_state": doc.get("verification_state"),
         "preferred_language": doc.get("preferred_language", "ar"),
@@ -171,6 +197,89 @@ def create_applicant(body: ApplicantCreate):
     return _public_applicant(created)
 
 
+@router.post("/applicants/register", response_model=ApplicantOut, status_code=201)
+def register_applicant(payload: dict):
+    """Simplified applicant registration endpoint.
+
+    Accepts minimal fields: `full_name`, `national_id` (or `registration_number`), and `password`.
+    Fills reasonable defaults for other required fields to support quick registration for the demo.
+    """
+    # Basic validation
+    full_name = (payload.get("full_name") or "").strip()
+    national_id = (payload.get("national_id") or payload.get("nid") or None)
+    registration_number = payload.get("registration_number")
+    password = payload.get("password")
+
+    if not full_name:
+        raise HTTPException(status_code=400, detail="full_name is required")
+
+    # Avoid duplicate national_id/registration_number
+    dup_query = {"$or": []}
+    if national_id:
+        dup_query["$or"].append({"national_id": national_id})
+        dup_query["$or"].append({"identity.national_id": national_id})
+    if registration_number:
+        dup_query["$or"].append({"registration_number": registration_number})
+        dup_query["$or"].append({"identity.registration_number": registration_number})
+
+    if dup_query["$or"]:
+        if db.applicants.find_one(dup_query):
+            raise HTTPException(status_code=409, detail="Applicant with provided identity already exists")
+
+    now = datetime.utcnow()
+    doc = {
+        "full_name": full_name,
+        "national_id": national_id,
+        "registration_number": registration_number,
+        "contact": payload.get("contact") or {"email": "unknown@example.com", "phone": "+97000000000"},
+        "address": payload.get("address") or {"city": "Ramallah", "neighborhood": "Unknown", "zone_id": "ZONE-UNKNOWN"},
+        "applicant_type": payload.get("applicant_type") or "citizen",
+        "verification_state": "unverified",
+        "preferred_language": payload.get("preferred_language") or "ar",
+        "notification_preferences": payload.get("notification_preferences") or {},
+        "linked_applications": [],
+        "privacy_settings": payload.get("privacy_settings") or {},
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    if password:
+        doc["password_hash"] = pwd_context.hash(password)
+
+    result = db.applicants.insert_one(doc)
+    created = db.applicants.find_one({"_id": result.inserted_id})
+    return _public_applicant(created)
+
+
+@router.post("/applicants/login", response_model=dict)
+def applicant_login(body: dict):
+    """Authenticate applicant by `national_id` or `registration_number` + `password`.
+    Returns an access token containing `applicant_id`.
+    """
+    identifier = body.get("national_id") or body.get("registration_number")
+    password = body.get("password")
+    if not identifier or not password:
+        raise HTTPException(status_code=400, detail="national_id/registration_number and password are required")
+
+    # Try national_id first, then registration_number
+    applicant = db.applicants.find_one({"$or": [{"national_id": identifier}, {"identity.national_id": identifier}, {"registration_number": identifier}, {"identity.registration_number": identifier}]})
+    if not applicant:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    password_hash = applicant.get("password_hash")
+    if not password_hash:
+        raise HTTPException(status_code=401, detail="No password set for this applicant")
+
+    if not (pwd_context.verify(password, password_hash) or (password_hash and pbkdf2_sha256.verify(password, password_hash))):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Create token
+    applicant_id = str(applicant.get("_id"))
+    token = create_access_token({"applicant_id": applicant_id})
+    public = _public_applicant(applicant)
+    return {"access_token": token, "token_type": "bearer", "applicant": public}
+
+
 @router.get("/applicants/{applicant_id}", response_model=ApplicantOut)
 def get_applicant(applicant_id: str):
     """Retrieve a restricted applicant profile."""
@@ -178,6 +287,31 @@ def get_applicant(applicant_id: str):
     if not applicant:
         raise HTTPException(status_code=404, detail="Applicant not found.")
     return _public_applicant(applicant)
+
+
+@router.get("/applicants/", response_model=list)
+def list_applicants(national_id: str = None, registration_number: str = None, q: str = None, limit: int = 50):
+    """List or search applicants.
+
+    Supports lookup by `national_id`, `registration_number`, or a simple full-name `q` search.
+    Used by the frontend applicant login lookup (best-effort).
+    """
+    conditions = []
+    if national_id:
+        conditions.append({"$or": [{"national_id": national_id}, {"identity.national_id": national_id}]})
+    if registration_number:
+        conditions.append({"$or": [{"registration_number": registration_number}, {"identity.registration_number": registration_number}]})
+    if q:
+        # simple case-insensitive name search
+        conditions.append({"full_name": {"$regex": q, "$options": "i"}})
+
+    query = {}
+    if conditions:
+        query = {"$and": conditions} if len(conditions) > 1 else conditions[0]
+
+    cursor = db.applicants.find(query).limit(min(max(1, limit), 200))
+    results = list(cursor)
+    return [_public_applicant(doc) for doc in results]
 
 
 @router.get("/applicants/{applicant_id}/applications", response_model=list)

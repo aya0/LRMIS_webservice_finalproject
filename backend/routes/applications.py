@@ -8,6 +8,7 @@ from database import land_applications, certificates, parcels
 from models.schemas import (
     ApplicationCreate, ApplicationTransition,
     HoldRequest, RejectRequest, NoteRequest,
+    ApplicationUpdate,
 )
 from services.workflow import (
     validate_transition, build_workflow_field,
@@ -127,6 +128,102 @@ def create_application(
 def get_application(application_id: str):
     doc = get_app_or_404(application_id)
     return serialize(doc)
+
+
+#  PATCH /applications/{application_id}
+
+@router.patch("/{application_id}")
+def update_application(application_id: str, body: ApplicationUpdate):
+    """Update editable application fields before the record is finalized."""
+    doc = get_app_or_404(application_id)
+    app_id = doc["application_id"]
+
+    if doc["status"] in ("approved", "certificate_issued", "closed"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot edit application in '{doc['status']}' state.",
+        )
+
+    payload = body.model_dump(exclude_unset=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="No fields provided for update.")
+
+    update_fields = {}
+    if payload.get("priority") is not None:
+        update_fields["priority"] = payload["priority"].value
+    if payload.get("description") is not None:
+        update_fields["description"] = payload["description"]
+    if payload.get("tags") is not None:
+        update_fields["tags"] = payload["tags"]
+    if payload.get("required_documents") is not None:
+        update_fields["required_documents"] = [d.model_dump() for d in payload["required_documents"]]
+
+    update_fields["timestamps.updated_at"] = datetime.now(timezone.utc)
+
+    land_applications.update_one(
+        {"application_id": app_id},
+        {"$set": update_fields},
+    )
+
+    updated = land_applications.find_one({"application_id": app_id})
+    log_event(app_id, "application_updated", "staff", "system", update_fields)
+    return {"message": "Application updated successfully.", "application": serialize(updated)}
+
+
+#  PUT /applications/{application_id}
+
+@router.put("/{application_id}")
+def replace_application(application_id: str, body: ApplicationCreate):
+    """Fully replace the editable application content before final approval."""
+    doc = get_app_or_404(application_id)
+    app_id = doc["application_id"]
+
+    if doc["status"] in ("approved", "certificate_issued", "closed"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot replace application in '{doc['status']}' state.",
+        )
+
+    now = datetime.now(timezone.utc)
+    replacement = {
+        "application_type": body.application_type.value,
+        "priority": body.priority.value,
+        "applicant_ref": body.applicant_ref.model_dump(),
+        "parcel_ref": body.parcel_ref.model_dump(),
+        "description": body.description,
+        "tags": body.tags,
+        "required_documents": [d.model_dump() for d in body.required_documents],
+        "timestamps.updated_at": now,
+        "idempotency_key": body.idempotency_key,
+    }
+
+    land_applications.update_one(
+        {"application_id": app_id},
+        {"$set": replacement},
+    )
+
+    updated = land_applications.find_one({"application_id": app_id})
+    log_event(app_id, "application_replaced", "staff", "system", replacement)
+    return {"message": "Application replaced successfully.", "application": serialize(updated)}
+
+
+#  DELETE /applications/{application_id}
+
+@router.delete("/{application_id}")
+def delete_application(application_id: str):
+    """Delete an application before it enters the later workflow stages."""
+    doc = get_app_or_404(application_id)
+    app_id = doc["application_id"]
+
+    if doc["status"] not in ("submitted", "pre_checked", "missing_documents", "on_hold", "rejected"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete application in '{doc['status']}' state.",
+        )
+
+    land_applications.delete_one({"application_id": app_id})
+    log_event(app_id, "application_deleted", "staff", "system", {})
+    return {"message": "Application deleted successfully.", "application_id": app_id}
 
 
 #  GET /applications/ 
@@ -332,6 +429,27 @@ def issue_certificate(application_id: str, issued_by: str = "registrar"):
     update_kpi(app_id, "certificate_issued", True)
 
     return {"message": "Certificate issued successfully.", "certificate": serialize(cert)}
+
+
+# GET /applications/{application_id}/certificate
+
+@router.get("/{application_id}/certificate")
+def get_application_certificate(application_id: str):
+    """Convenience endpoint to fetch the certificate linked to an application."""
+    doc = get_app_or_404(application_id)
+    cert_ref = doc.get("certificate", {}) or {}
+    cert_id = cert_ref.get("certificate_id")
+
+    cert = None
+    if cert_id:
+        cert = certificates.find_one({"certificate_id": cert_id})
+    if not cert:
+        cert = certificates.find_one({"application_id": doc["application_id"]})
+
+    if not cert:
+        raise HTTPException(status_code=404, detail="No certificate found for this application.")
+
+    return serialize(cert)
 
 
 # POST /applications/{application_id}/notes 

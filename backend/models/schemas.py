@@ -117,6 +117,18 @@ class ParcelCreate(BaseModel):
     current_owner_refs: List[dict] = []
 
 
+class ParcelUpdate(BaseModel):
+    parcel_number: Optional[str] = None
+    block_number: Optional[str] = None
+    basin_number: Optional[str] = None
+    zone_id: Optional[str] = None
+    area_sqm: Optional[float] = None
+    land_use: Optional[str] = None
+    geometry: Optional[GeoJSONPolygon] = None
+    address_hint: Optional[str] = None
+    current_owner_refs: Optional[List[dict]] = None
+
+
 class ParcelResponse(ParcelCreate):
     id: str
     registration_status: str = "pending"
@@ -136,6 +148,13 @@ class ApplicationCreate(BaseModel):
     tags: List[str] = []
     required_documents: List[RequiredDocument] = []
     idempotency_key: Optional[str] = None  # for duplicate prevention
+
+
+class ApplicationUpdate(BaseModel):
+    priority: Optional[Priority] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    required_documents: Optional[List[RequiredDocument]] = None
 
 
 class ApplicationTransition(BaseModel):
