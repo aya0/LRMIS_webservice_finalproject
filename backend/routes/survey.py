@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Header, Depends
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from bson import ObjectId
 import database as db
 from models.survey_task import (
@@ -34,7 +34,7 @@ def _log_event(application_id: str, event_type: str, actor_type: str,
                 "event_stream": {
                     "type":      event_type,
                     "by":        {"actor_type": actor_type, "actor_id": actor_id},
-                    "at":        {"$date": datetime.utcnow().isoformat() + "Z"},
+                    "at":        datetime.now(timezone.utc),
                     "meta":      meta,
                 }
             }
@@ -58,7 +58,7 @@ def auto_assign_surveyor(application_id: str):
 
     surveyor_id  = str(surveyor["_id"])
     parcel_id    = str((application.get("parcel_ref") or {}).get("parcel_id", ""))
-    now          = datetime.utcnow()
+    now          = datetime.now(timezone.utc)
 
     # Create survey task
     task_number = db.survey_tasks.count_documents({}) + 1
@@ -131,17 +131,12 @@ def add_survey_milestone(application_id: str, body: MilestoneRequest):
 
     milestone_doc = {
         "type": body.milestone,
-        "at":   datetime.utcnow(),
+        "at":   datetime.now(timezone.utc),
         "by":   body.by,
         "meta": body.meta,
     }
     if body.scheduled_date:
         milestone_doc["meta"]["scheduled_date"] = body.scheduled_date
-
-    update_fields = {
-        "status":    body.milestone,
-        "$push":     {"milestones": milestone_doc},
-    }
 
     # Mark report_uploaded flag when milestone reached
     if body.milestone == SurveyMilestoneType.report_uploaded:
@@ -194,7 +189,7 @@ def upload_survey_report(application_id: str, body: SurveyReportCreate):
                 "$push": {
                     "milestones": {
                         "type": SurveyMilestoneType.report_uploaded,
-                        "at":   datetime.utcnow(),
+                        "at":   datetime.now(timezone.utc),
                         "by":   body.surveyor_id,
                         "meta": {"report_title": body.report_title},
                     }
@@ -409,19 +404,6 @@ def reassign_surveyor(application_id: str, new_surveyor_id: str, reason: str = "
         {"$inc": {"workload.active_tasks": 1}}
     )
 
-    # Record a milestone note about reassignment
-    reassignment_note = {
-        "type": task["status"],  # Stay on same milestone — just change who's responsible
-        "at": datetime.utcnow(),
-        "by": "admin",
-        "meta": {
-            "event": "manual_reassignment",
-            "from_surveyor": old_surveyor_id,
-            "to_surveyor": new_surveyor_id,
-            "reason": reason,
-        },
-    }
-
     db.survey_tasks.update_one(
         {"application_id": application_id},
         {
@@ -429,7 +411,7 @@ def reassign_surveyor(application_id: str, new_surveyor_id: str, reason: str = "
             "$push": {"field_notes": {
                 "note":     f"Reassigned to {new_surveyor.get('name', new_surveyor_id)}. Reason: {reason}",
                 "added_by": "system",
-                "added_at": datetime.utcnow(),
+                "added_at": datetime.now(timezone.utc),
             }},
         }
     )
@@ -458,7 +440,7 @@ def add_field_note(task_id: str, body: FieldNoteRequest):
     note_doc = {
         "note":     body.note,
         "added_by": body.added_by,
-        "added_at": datetime.utcnow(),
+        "added_at": datetime.now(timezone.utc),
     }
 
     result = db.survey_tasks.update_one(

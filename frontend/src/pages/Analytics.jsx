@@ -5,9 +5,10 @@
  * PLACEHOLDER: data from Group module analytics endpoints
  */
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts'
 import {
   getKPIs, getApplicationsByStatus, getApplicationsByType, getApplicationsByZone,
@@ -16,16 +17,22 @@ import {
   downloadManagementReport
 } from '../api/api'
 
-function KPICard({ label, value, icon, accent = '#2563eb' }) {
+function KPICard({ label, value, icon, accent = '#2563eb', onClick }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-5 flex items-start gap-4">
+    <div
+      onClick={onClick}
+      className={`bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-5 flex items-start gap-4 ${onClick ? 'cursor-pointer hover:shadow-md hover:border-slate-200 transition-all' : ''}`}
+    >
       <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
            style={{ backgroundColor: accent + '15' }}>
-        <span style={{ color: accent }} className="text-lg">{icon}</span>
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          {icon}
+        </svg>
       </div>
       <div>
         <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">{label}</p>
         <p className="text-2xl font-bold text-slate-800 mt-0.5">{value ?? '—'}</p>
+        {onClick && <p className="text-xs text-blue-500 mt-1">View all</p>}
       </div>
     </div>
   )
@@ -60,7 +67,17 @@ function PlaceholderChart({ title, subtitle }) {
 
 const CHART_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
+const STATUS_FILTER_MAP = {
+  total_applications:          null,
+  pending_applications:        'submitted',
+  approved_applications:       'approved',
+  rejected_applications:       'rejected',
+  applications_under_objection:'under_objection',
+  delayed_applications:        'submitted',
+}
+
 export default function Analytics() {
+  const navigate = useNavigate()
   const [kpis,       setKpis]       = useState({})
   const [byStatus,   setByStatus]   = useState([])
   const [byType,     setByType]     = useState([])
@@ -73,18 +90,31 @@ export default function Analytics() {
   const [delayed,    setDelayed]    = useState({ count: 0, items: [] })
   const [hotspots,   setHotspots]   = useState([])
   const [loading,    setLoading]    = useState(true)
+  const [dlErr,      setDlErr]      = useState('')
+
+  function goToApplications(statusFilter) {
+    // Navigate to staff console — Student 3's page — pre-filtered
+    navigate(statusFilter ? `/staff?filter=${statusFilter}` : '/staff')
+  }
 
   async function downloadReport(format) {
-    const response = await downloadManagementReport(format)
-    const blob = response.data
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `lrmis-management-report.${format}`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    setDlErr('')
+    try {
+      const response = await downloadManagementReport(format)
+      const blob = new Blob([response.data], {
+        type: format === 'pdf' ? 'application/pdf' : 'text/csv',
+      })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `lrmis-management-report.${format}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      setDlErr('Download failed. Make sure the backend is running.')
+    }
   }
 
   useEffect(() => {
@@ -122,42 +152,73 @@ export default function Analytics() {
         <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest mb-1">Reporting</p>
         <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Analytics Dashboard</h1>
         <p className="text-slate-400 text-sm mt-1">System-wide KPIs and operational metrics</p>
-        <div className="flex gap-3 mt-5 flex-wrap">
+        <div className="flex gap-3 mt-5 flex-wrap items-center">
           <button onClick={() => downloadReport('csv')} className="bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
             Download CSV Report
           </button>
           <button onClick={() => downloadReport('pdf')} className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
             Download PDF Report
           </button>
+          {dlErr && <span className="text-xs text-red-500">{dlErr}</span>}
         </div>
-      </div>
-
-      {/* Placeholder notice */}
-      <div className="bg-amber-50 border border-amber-100 rounded-xl px-5 py-3 flex items-center gap-3 mb-8">
-        <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-        <p className="text-xs text-amber-700 font-medium">
-          Analytics data will populate once the Group module implements <code className="bg-amber-100 px-1 rounded">GET /analytics/*</code> endpoints.
-        </p>
       </div>
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <KPICard label="Total Applications"    value={kpis.total_applications}          icon="📋" accent="#2563eb" />
-        <KPICard label="Pending"               value={kpis.pending_applications}         icon="⏳" accent="#f59e0b" />
-        <KPICard label="Approved"              value={kpis.approved_applications}        icon="✅" accent="#10b981" />
-        <KPICard label="Rejected"              value={kpis.rejected_applications}        icon="❌" accent="#ef4444" />
-        <KPICard label="Under Objection"       value={kpis.applications_under_objection} icon="⚠️" accent="#f59e0b" />
-        <KPICard label="Certificates Issued"   value={kpis.certificates_issued}          icon="🏛️" accent="#10b981" />
-        <KPICard label="Avg Processing Time"   value={kpis.avg_processing_days ? `${kpis.avg_processing_days}d` : null} icon="⏱️" accent="#8b5cf6" />
-        <KPICard label="Surveyor Active Tasks" value={kpis.surveyor_active_tasks}        icon="🗺️" accent="#2563eb" />
-        <KPICard label="Delayed Applications"  value={kpis.delayed_applications}         icon="🚨" accent="#dc2626" />
+        <KPICard label="Total Applications"    value={kpis.total_applications}          accent="#2563eb"
+          onClick={() => goToApplications(null)}
+          icon={<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>} />
+        <KPICard label="Pending"               value={kpis.pending_applications}         accent="#f59e0b"
+          onClick={() => goToApplications('submitted')}
+          icon={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} />
+        <KPICard label="Approved"              value={kpis.approved_applications}        accent="#10b981"
+          onClick={() => goToApplications('approved')}
+          icon={<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>} />
+        <KPICard label="Rejected"              value={kpis.rejected_applications}        accent="#ef4444"
+          onClick={() => goToApplications('rejected')}
+          icon={<><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>} />
+        <KPICard label="Under Objection"       value={kpis.applications_under_objection} accent="#f59e0b"
+          onClick={() => goToApplications('under_objection')}
+          icon={<><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>} />
+        <KPICard label="Certificates Issued"   value={kpis.certificates_issued}          accent="#10b981"
+          onClick={() => navigate('/certificates')}
+          icon={<><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></>} />
+        <KPICard label="Avg Processing Time"   value={kpis.avg_processing_days ? `${kpis.avg_processing_days}d` : null} accent="#8b5cf6"
+          icon={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><line x1="2" y1="2" x2="22" y2="22"/></>} />
+        <KPICard label="Surveyor Active Tasks" value={kpis.surveyor_active_tasks}        accent="#2563eb"
+          icon={<><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></>} />
+        <KPICard label="Delayed Applications"  value={kpis.delayed_applications}         accent="#dc2626"
+          onClick={() => goToApplications('submitted')}
+          icon={<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>} />
       </div>
 
       {/* Charts grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Pie chart — Status distribution */}
+        {byStatus.length > 0 && (
+          <ChartCard title="Status Distribution" subtitle="Share of applications across workflow states">
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={byStatus}
+                  dataKey="count"
+                  nameKey="status"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ status, percent }) => `${status?.replace(/_/g,' ')} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {byStatus.map((_, i) => (
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(val, name) => [val, name?.replace(/_/g,' ')]} contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        )}
 
         {/* Applications by status */}
         {byStatus.length > 0 ? (

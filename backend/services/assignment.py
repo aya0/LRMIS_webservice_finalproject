@@ -6,7 +6,7 @@ Policy (from spec): zone match + surveyor availability + workload balancing
 
 Each criterion contributes a score. The surveyor with the highest score is selected.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import database as db
 
@@ -130,7 +130,7 @@ def find_best_surveyor(application_id: str) -> dict:
         raise ValueError("No active surveyors found in the system.")
 
     # ── Step 3: Score each candidate ─────────────────────────────────────────
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     scored = []
     for s in candidates:
         score = _score_surveyor(s, zone_id, required_skills, priority, now)

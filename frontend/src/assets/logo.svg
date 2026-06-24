@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Teal circle background with soft glow -->
+  <defs>
+    <radialGradient id="bg" cx="45%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#7ecdc4"/>
+      <stop offset="100%" stop-color="#4aada3"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Main circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#bg)"/>
+
+  <!-- Soft inner glow ring -->
+  <circle cx="50" cy="50" r="46" fill="none" stroke="#a8ddd8" stroke-width="3" opacity="0.35"/>
+
+  <!-- Map base (folded paper look) -->
+  <g filter="url(#glow)" fill="#f0ece0">
+    <!-- Map body -->
+    <path d="M22 58 L38 52 L62 58 L78 52 L78 72 L62 78 L38 72 Z" fill="#f0ece0" opacity="0.95"/>
+    <!-- Left fold crease -->
+    <path d="M38 52 L38 72" stroke="#d6d0bc" stroke-width="1" fill="none"/>
+    <!-- Right fold crease -->
+    <path d="M62 58 L62 78" stroke="#d6d0bc" stroke-width="1" fill="none"/>
+    <!-- Road lines on map -->
+    <path d="M26 62 Q42 59 55 64" stroke="#c8c2ac" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <path d="M46 70 Q58 67 72 69" stroke="#c8c2ac" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <path d="M36 68 Q44 65 50 68" stroke="#c8c2ac" stroke-width="1" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- Location pin -->
+  <g filter="url(#glow)">
+    <!-- Pin body -->
+    <path d="M50 22 C43 22 37 28 37 35 C37 44 50 57 50 57 C50 57 63 44 63 35 C63 28 57 22 50 22 Z" fill="#f0ece0"/>
+    <!-- Pin inner circle -->
+    <circle cx="50" cy="35" r="6" fill="#7ecdc4"/>
+  </g>
+</svg>

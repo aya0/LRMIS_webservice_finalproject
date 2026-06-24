@@ -1,4 +1,5 @@
 import { Routes, Route, NavLink, Navigate, useNavigate  , BrowserRouter } from 'react-router-dom'
+import logo from './assets/logo.svg'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Login         from './pages/Login'
 import Home          from './pages/Home'
@@ -100,12 +101,7 @@ function Shell() {
         {/* Logo */}
         <div className="px-6 py-7 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-500 flex items-center justify-center shadow-lg">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-            </div>
+            <img src={logo} alt="LRMIS" className="w-9 h-9 rounded-xl shadow-lg" />
             <div>
               <p className="text-white font-bold text-sm tracking-wide">LRMIS</p>
               <p className="text-blue-300 text-xs font-light">Land Registry</p>
@@ -219,7 +215,7 @@ export default function App() {
         <Route path="/applicant/login" element={<LoginApplicant />} />
         <Route path="/dashboard" element={<RequireStaff><StaffShell><Dashboard /></StaffShell></RequireStaff>} />
         <Route path="/home" element={<RequireStaff><StaffShell><StaffHome /></StaffShell></RequireStaff>} />
-        <Route path="/" element={<RequireStaff><StaffShell><SurveyorTasks /></StaffShell></RequireStaff>} />
+        <Route path="/tasks" element={<RequireStaff><StaffShell><SurveyorTasks /></StaffShell></RequireStaff>} />
         <Route path="/tasks/:taskId" element={<RequireStaff><StaffShell><TaskExecution /></StaffShell></RequireStaff>} />
         <Route path="/applicant" element={<ApplicantHome />} />
         <Route path="/applicant/home" element={<ApplicantHome />} />
