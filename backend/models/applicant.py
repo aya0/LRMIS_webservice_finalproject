@@ -31,6 +31,17 @@ class ApplicantAddress(BaseModel):
     zone_id: str = Field(..., pattern=r"^[A-Za-z0-9\-]+$", examples=["ZONE-RM-01"])
 
 
+class ApplicantContactOut(BaseModel):
+    email: Optional[str] = Field(default=None, pattern=r"^[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}$")
+    phone: Optional[str] = Field(default=None, pattern=r"^\+?[0-9]{8,15}$")
+
+
+class ApplicantAddressOut(BaseModel):
+    city: Optional[str] = Field(default=None, pattern=r"^[A-Za-z\u0600-\u06FF\s]+$")
+    neighborhood: Optional[str] = Field(default=None, pattern=r"^[A-Za-z0-9\u0600-\u06FF\s\-]+$")
+    zone_id: Optional[str] = Field(default=None, pattern=r"^[A-Za-z0-9\-]+$")
+
+
 class NotificationPreferences(BaseModel):
     email: bool = Field(default=True, examples=[True])
     sms: bool = Field(default=False, examples=[False])
@@ -108,13 +119,41 @@ class ApplicantCreate(BaseModel):
         return self
 
 
+class ApplicantUpdate(BaseModel):
+    full_name: Optional[str] = Field(default=None, min_length=2, pattern=r"^[A-Za-z\u0600-\u06FF\s\-']+$")
+    national_id: Optional[str] = Field(default=None, pattern=r"^\d{6,20}$")
+    registration_number: Optional[str] = Field(default=None, max_length=30, pattern=r"^[A-Za-z0-9\-/]+$")
+    contact: Optional[ApplicantContact] = None
+    address: Optional[ApplicantAddress] = None
+    applicant_type: Optional[ApplicantType] = None
+    preferred_language: Optional[str] = Field(default=None, min_length=2, max_length=5)
+    notification_preferences: Optional[NotificationPreferences] = None
+    privacy_settings: Optional[PrivacySettings] = None
+
+    @field_validator("national_id", "registration_number", mode="before")
+    @classmethod
+    def blank_identity_to_none(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    @model_validator(mode="after")
+    def validate_identity_when_type_changes(self):
+        if self.applicant_type == ApplicantType.citizen and not self.national_id:
+            raise ValueError("national_id is required for citizen applicants.")
+        if self.applicant_type and self.applicant_type != ApplicantType.citizen and not self.registration_number:
+            raise ValueError("registration_number is required for this applicant type.")
+        return self
+
+
 class ApplicantOut(BaseModel):
     id: str = Field(..., examples=["665f6b5d2b8f2f25d1b46311"])
     full_name: str
     national_id: Optional[str] = None
     registration_number: Optional[str] = None
-    contact: ApplicantContact
-    address: ApplicantAddress
+    contact: ApplicantContactOut
+    address: ApplicantAddressOut
     applicant_type: ApplicantType
     verification_state: VerificationState
     preferred_language: str

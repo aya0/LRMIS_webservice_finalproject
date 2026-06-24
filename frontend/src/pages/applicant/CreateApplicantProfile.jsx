@@ -1,264 +1,381 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { createApplicant } from '../../services/applicantApi'
+import { useMemo, useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { createApplicant, getApplicant, getZones, updateApplicant } from '../../services/applicantApi'
 import ApplicantLayout from './ApplicantLayout'
-import { friendlyApplicantError, saveApplicantId } from './applicantUx'
+import { friendlyApplicantError, saveApplicantId, getSavedApplicantId } from './applicantUx'
+import { useAuth } from '../../context/AuthContext'
 import './applicantPortal.css'
 
-const applicantTypes = ['citizen', 'lawyer', 'company', 'surveyor', 'authorized_representative']
+const applicantTypes = [
+  { value: 'citizen', label: 'Citizen' },
+  { value: 'lawyer', label: 'Lawyer' },
+  { value: 'company', label: 'Company' },
+  { value: 'surveyor', label: 'Surveyor' },
+  { value: 'authorized_representative', label: 'Authorized Representative' },
+]
+
+const languages = [
+  { value: 'ar', label: 'Arabic' },
+  { value: 'en', label: 'English' },
+]
+
+const steps = ['Identity', 'Contact', 'Address', 'Review']
+
+const initialForm = {
+  full_name: '',
+  applicant_type: 'citizen',
+  national_id: '',
+  registration_number: '',
+  license_number: '',
+  email: '',
+  phone: '',
+  preferred_language: 'ar',
+  city: '',
+  neighborhood: '',
+  zone_id: '',
+}
+
+function formatApplicantType(value) {
+  return applicantTypes.find(type => type.value === value)?.label || value
+}
+
+function formatLanguage(value) {
+  return languages.find(language => language.value === value)?.label || value
+}
+
+function identityFieldConfig(applicantType) {
+  if (applicantType === 'citizen') {
+    return {
+      field: 'national_id',
+      label: 'National ID',
+      placeholder: 'Enter national ID',
+      helper: '6 to 20 digits',
+    }
+  }
+
+  if (applicantType === 'lawyer' || applicantType === 'surveyor') {
+    return {
+      field: 'license_number',
+      label: 'License Number',
+      placeholder: 'Enter professional license number',
+      helper: 'Letters, numbers, hyphen, or slash',
+    }
+  }
+
+  return {
+    field: 'registration_number',
+    label: 'Registration Number',
+    placeholder: 'Enter registration number',
+    helper: 'Letters, numbers, hyphen, or slash',
+  }
+}
 
 function errorMessage(err) {
-  return friendlyApplicantError(err, 'Request failed. Please check the highlighted information and try again.')
+  if (err.response?.status === 409) {
+    return 'An applicant with this identity already exists. Please check the information or log in to your existing profile.'
+  }
+  return friendlyApplicantError(err, 'We could not create your profile. Please review the highlighted fields and try again.')
 }
 
 export default function CreateApplicantProfile() {
-  const [form, setForm] = useState({
-    full_name: '',
-    national_id: '',
-    registration_number: '',
-    email: '',
-    phone: '',
-    city: '',
-    neighborhood: '',
-    zone_id: '',
-    applicant_type: 'citizen',
-    verification_state: 'unverified',
-    preferred_language: 'ar',
-    notify_email: true,
-    notify_sms: false,
-    share_contact_with_staff: false,
-    allow_status_notifications: true,
-  })
+  const [form, setForm] = useState(initialForm)
+  const [activeStep, setActiveStep] = useState(0)
+  const [errors, setErrors] = useState({})
+  const [touched, setTouched] = useState({})
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
-  const [error, setError] = useState(null)
-  const [errors, setErrors] = useState({})
+  const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
-  const [activeStep, setActiveStep] = useState(0)
-  const [preferencesInteracted, setPreferencesInteracted] = useState(false)
-  const [submitAttempted, setSubmitAttempted] = useState(false)
-  const [warningStep, setWarningStep] = useState(null)
-
-  function getFieldError(name, value, applicantType) {
-    value = typeof value === 'string' ? value.trim() : value
-    switch (name) {
-      case 'full_name':
-        if (!value) return 'Full name is required.'
-        if (!/^[A-Za-z\u0600-\u06FF\s\-']+$/.test(value)) return 'Full name should contain letters only.'
-        break
-      case 'national_id':
-        if (applicantType === 'citizen' && !value) return 'National ID is required for citizens.'
-        if (value && !/^\d{6,20}$/.test(value)) return 'National ID should be 6 to 20 digits.'
-        break
-      case 'registration_number':
-        if (applicantType !== 'citizen' && !value) return 'Registration number is required for this applicant type.'
-        if (value && !/^[A-Za-z0-9\-/]+$/.test(value)) return 'Registration number can contain letters, numbers, hyphen, or slash only.'
-        if (value && value.length > 30) return 'Registration number cannot exceed 30 characters.'
-        break
-      case 'email':
-        if (!value) return 'Email is required.'
-        if (!/^[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}$/.test(value)) return 'Please enter a valid email address.'
-        break
-      case 'phone':
-        if (!value) return 'Phone is required.'
-        if (!/^\+?[0-9]{8,15}$/.test(value)) return 'Phone number should be valid, for example +970599111111.'
-        break
-      case 'city':
-        if (!value) return 'City is required.'
-        if (!/^[A-Za-z\u0600-\u06FF\s]+$/.test(value)) return 'City should contain letters only.'
-        break
-      case 'neighborhood':
-        if (!value) return 'Neighborhood is required.'
-        if (!/^[A-Za-z0-9\u0600-\u06FF\s\-]+$/.test(value)) return 'Neighborhood contains invalid characters.'
-        break
-      case 'zone_id':
-        if (!value) return 'Zone ID is required.'
-        if (!/^[A-Za-z0-9\-]+$/.test(value)) return 'Zone ID can contain letters, numbers, and hyphens only.'
-        break
-    }
-    return ''
-  }
+  const [editMode, setEditMode] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
+  const [zones, setZones] = useState([])
+  const [zonesLoading, setZonesLoading] = useState(true)
+  const [zonesError, setZonesError] = useState('')
+  const navigate = useNavigate()
+  const { auth, loginApplicant } = useAuth()
 
   useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          if (entry.target.id === 'personal-section') setActiveStep(0)
-          else if (entry.target.id === 'contact-section') setActiveStep(1)
-          else if (entry.target.id === 'address-section') setActiveStep(2)
-          else if (entry.target.id === 'preferences-section') setActiveStep(3)
-        }
-      })
-    }, { rootMargin: '-20% 0px -60% 0px' })
+    let active = true
 
-    const sections = ['personal-section', 'contact-section', 'address-section', 'preferences-section']
-    sections.forEach(id => {
-      const el = document.getElementById(id)
-      if (el) observer.observe(el)
-    })
+    async function loadZones() {
+      setZonesLoading(true)
+      setZonesError('')
+      try {
+        const res = await getZones()
+        const items = Array.isArray(res.data) ? res.data : []
+        if (active) setZones(items.filter(item => item?.zone_id))
+      } catch {
+        if (active) setZonesError('Unable to load zones. Please try again.')
+      } finally {
+        if (active) setZonesLoading(false)
+      }
+    }
 
-    return () => observer.disconnect()
+    loadZones()
+    return () => {
+      active = false
+    }
   }, [])
 
+  useEffect(() => {
+    const savedId = getSavedApplicantId()
+    if (savedId) {
+      setEditMode(true)
+      getApplicant(savedId)
+        .then(res => {
+          const data = res.data
+          const isLawyerOrSurveyor = data.applicant_type === 'lawyer' || data.applicant_type === 'surveyor'
+          setForm({
+            full_name: data.full_name || '',
+            applicant_type: data.applicant_type || 'citizen',
+            national_id: data.national_id || '',
+            registration_number: !isLawyerOrSurveyor ? (data.registration_number || '') : '',
+            license_number: isLawyerOrSurveyor ? (data.registration_number || '') : '',
+            email: data.contact?.email || '',
+            phone: data.contact?.phone || '',
+            preferred_language: data.preferred_language || 'ar',
+            city: data.address?.city || '',
+            neighborhood: data.address?.neighborhood || '',
+            zone_id: data.address?.zone_id || '',
+          })
+        })
+        .catch(() => {
+          setEditMode(false)
+        })
+        .finally(() => {
+          setPageLoading(false)
+        })
+    } else {
+      setPageLoading(false)
+    }
+  }, [])
+
+  const isCitizen = form.applicant_type === 'citizen'
+  const isLawyerOrSurveyor = form.applicant_type === 'lawyer' || form.applicant_type === 'surveyor'
+  const identityConfig = identityFieldConfig(form.applicant_type)
+
+  const visibleFieldsByStep = useMemo(() => ({
+    0: isCitizen
+      ? ['full_name', 'applicant_type', 'national_id']
+      : (isLawyerOrSurveyor
+          ? ['full_name', 'applicant_type', 'license_number']
+          : ['full_name', 'applicant_type', 'registration_number']),
+    1: ['email', 'phone', 'preferred_language'],
+    2: ['city', 'neighborhood', 'zone_id'],
+    3: [],
+  }), [isCitizen])
+
+  function getFieldError(name, value = form[name], applicantType = form.applicant_type, log = false) {
+    const normalized = typeof value === 'string' ? value.trim() : value
+
+    const check = () => {
+      switch (name) {
+        case 'full_name':
+          if (!normalized) return 'Full Name is required'
+          if (!/^[A-Za-z\u0600-\u06FF\s\-']+$/.test(normalized)) return 'Full name should contain letters only.'
+          return ''
+        case 'national_id':
+          if (applicantType === 'citizen' && !normalized) return 'National ID is required'
+          if (normalized && !/^\d{6,20}$/.test(normalized)) return 'National ID should be 6 to 20 digits.'
+          return ''
+        case 'registration_number':
+        case 'license_number':
+          if (applicantType !== 'citizen' && !normalized) return `${identityFieldConfig(applicantType).label} is required`
+          if (normalized && !/^[A-Za-z0-9\-/]+$/.test(normalized)) return `${identityFieldConfig(applicantType).label} can contain letters, numbers, hyphen, or slash only.`
+          if (normalized && normalized.length > 30) return `${identityFieldConfig(applicantType).label} cannot exceed 30 characters.`
+          return ''
+        case 'email':
+          if (!normalized) return 'Email is required'
+          if (!/^[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}$/.test(normalized)) return 'Please enter a valid email address.'
+          return ''
+        case 'phone':
+          if (!normalized) return 'Phone Number is required'
+          if (!/^\+?[0-9]{8,15}$/.test(normalized)) return 'Phone number format is incorrect. Example: +970599111111.'
+          return ''
+        case 'city':
+          if (!normalized) return 'City is required'
+          if (!/^[A-Za-z\u0600-\u06FF\s\-]+$/.test(normalized)) return 'City or town should contain letters only.'
+          return ''
+        case 'neighborhood':
+          if (!normalized) return 'Neighborhood is required'
+          if (!/^[A-Za-z0-9\u0600-\u06FF\s\-]+$/.test(normalized)) return 'Neighborhood contains unsupported characters.'
+          return ''
+        case 'zone_id':
+          if (!normalized) return 'Please select a Zone / Area Code.'
+          if (!/^[A-Za-z0-9\-_]+$/.test(normalized)) return 'Zone / Area Code can contain letters, numbers, hyphens, or underscores only.'
+          return ''
+        case 'preferred_language':
+          if (!normalized) return 'Preferred Language is required'
+          return ''
+        default:
+          return ''
+      }
+    }
+
+    const err = check()
+    if (log && err) {
+      console.warn(`[Validation] Field failed: ${name}, Value: "${value}", Error: "${err}"`)
+    }
+    return err
+  }
+
+  function validateFields(fieldNames, log = false) {
+    const nextErrors = {}
+    fieldNames.forEach(field => {
+      const err = getFieldError(field, undefined, undefined, log)
+      if (err) nextErrors[field] = err
+    })
+    return nextErrors
+  }
+
+  function validateStep(stepIndex = activeStep) {
+    const stepErrors = validateFields(visibleFieldsByStep[stepIndex] || [], true)
+    setErrors(current => ({ ...current, ...stepErrors }))
+    setTouched(current => ({
+      ...current,
+      ...Object.fromEntries((visibleFieldsByStep[stepIndex] || []).map(field => [field, true])),
+    }))
+    return Object.keys(stepErrors).length === 0
+  }
+
+  function allValidationErrors() {
+    return validateFields([0, 1, 2].flatMap(step => visibleFieldsByStep[step]), true)
+  }
+
+  function isStepValid(stepIndex) {
+    const fields = visibleFieldsByStep[stepIndex] || []
+    return fields.every(field => !getFieldError(field))
+  }
+
+  function cleanInput(name, value) {
+    if (name === 'full_name') return value.replace(/[^\p{L}\s\-']/gu, '')
+    if (name === 'national_id') return value.replace(/[^0-9]/g, '').slice(0, 20)
+    if (name === 'phone') {
+      let next = value.replace(/[^\d+]/g, '')
+      if (next.indexOf('+') > 0) next = next.replace(/\+/g, (match, offset) => offset === 0 ? '+' : '')
+      return next.slice(0, 16)
+    }
+    if (name === 'city') return value.replace(/[^\p{L}\s\-]/gu, '')
+    if (name === 'neighborhood') return value.replace(/[^\p{L}0-9\s\-]/gu, '')
+    if (name === 'zone_id') return value.replace(/[^a-zA-Z0-9\-_]/g, '').slice(0, 30)
+    if (name === 'registration_number' || name === 'license_number') return value.replace(/[^a-zA-Z0-9\-\/]/g, '').slice(0, 30)
+    return value
+  }
+
   function updateField(name, value) {
-    if (typeof value === 'string') {
-      if (name === 'full_name') value = value.replace(/[^\p{L}\s\-']/gu, '')
-      else if (name === 'national_id') value = value.replace(/[^0-9]/g, '').slice(0, 20)
-      else if (name === 'phone') {
-        value = value.replace(/[^\d+]/g, '')
-        if (value.indexOf('+') > 0) value = value.replace(/\+/g, (match, offset) => offset === 0 ? '+' : '')
-      }
-      else if (name === 'city') value = value.replace(/[^\p{L}\s\-]/gu, '')
-      else if (name === 'neighborhood') value = value.replace(/[^\p{L}0-9\s\-]/gu, '')
-      else if (name === 'zone_id') value = value.replace(/[^a-zA-Z0-9\-]/g, '')
-      else if (name === 'registration_number') value = value.replace(/[^a-zA-Z0-9\-\/]/g, '')
-    }
-
+    const nextValue = typeof value === 'string' ? cleanInput(name, value) : value
     setForm(current => {
-      const newForm = { ...current, [name]: value }
-      
-      // Clear error immediately if valid, but do NOT show error immediately on typing
-      if (errors[name]) {
-        const err = getFieldError(name, value, newForm.applicant_type)
-        if (!err) setErrors(prev => ({ ...prev, [name]: '' }))
-      }
-
+      const next = { ...current, [name]: nextValue }
       if (name === 'applicant_type') {
-        if (value !== 'citizen') setErrors(prev => ({ ...prev, national_id: '' }))
-        if (value === 'citizen') setErrors(prev => ({ ...prev, registration_number: '' }))
+        next.national_id = value === 'citizen' ? current.national_id : ''
+        next.registration_number = (value === 'company' || value === 'authorized_representative') ? current.registration_number : ''
+        next.license_number = (value === 'lawyer' || value === 'surveyor') ? current.license_number : ''
       }
-
-      return newForm
+      return next
     })
-  }
 
-  function handleBlur(name, value) {
-    const err = getFieldError(name, value, form.applicant_type)
-    setErrors(prev => ({ ...prev, [name]: err || '' }))
-  }
-
-  function buildValidationErrors() {
-    const newErrors = {}
-    const fieldsToValidate = ['full_name', 'national_id', 'registration_number', 'email', 'phone', 'city', 'neighborhood', 'zone_id']
-    fieldsToValidate.forEach(field => {
-      const err = getFieldError(field, form[field], form.applicant_type)
-      if (err) newErrors[field] = err
-    })
-    return newErrors
-  }
-
-  function validateForm() {
-    const newErrors = buildValidationErrors()
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  function sectionForField(field) {
-    const fieldToSection = {
-      full_name: { id: 'personal-section', index: 0 },
-      national_id: { id: 'personal-section', index: 0 },
-      registration_number: { id: 'personal-section', index: 0 },
-      email: { id: 'contact-section', index: 1 },
-      phone: { id: 'contact-section', index: 1 },
-      city: { id: 'address-section', index: 2 },
-      neighborhood: { id: 'address-section', index: 2 },
-      zone_id: { id: 'address-section', index: 2 },
+    if (touched[name]) {
+      const err = getFieldError(name, nextValue, name === 'applicant_type' ? nextValue : form.applicant_type)
+      setErrors(current => ({ ...current, [name]: err }))
     }
-    return fieldToSection[field] || null
-  }
 
-  function scrollToStep(sectionId, stepIndex) {
-    setActiveStep(stepIndex)
-    setWarningStep(stepIndex)
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
-
-  function firstIncompleteStep() {
-    const currentSteps = [
-      { id: 'personal-section', index: 0, isCompleted: isIdentityComplete() },
-      { id: 'contact-section', index: 1, isCompleted: isContactComplete() },
-      { id: 'address-section', index: 2, isCompleted: isAddressComplete() },
-      { id: 'preferences-section', index: 3, isCompleted: isPreferencesComplete() },
-    ]
-    return currentSteps.find(step => !step.isCompleted) || null
-  }
-
-  function handleStepClick(item, index) {
-    if (index === 4) {
-      const incomplete = firstIncompleteStep()
-      if (incomplete) {
-        const newErrors = buildValidationErrors()
-        setSubmitAttempted(true)
-        setErrors(newErrors)
-        scrollToStep(incomplete.id, incomplete.index)
-        return
-      }
+    if (name === 'applicant_type') {
+      setErrors(current => ({ ...current, national_id: '', registration_number: '', license_number: '' }))
     }
-    setActiveStep(index)
-    setWarningStep(null)
-    document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function handleBlur(name) {
+    setTouched(current => ({ ...current, [name]: true }))
+    setErrors(current => ({ ...current, [name]: getFieldError(name) }))
+  }
+
+  function goNext() {
+    if (!validateStep(activeStep)) return
+    setError('')
+    setActiveStep(step => Math.min(step + 1, steps.length - 1))
+  }
+
+  function goBack() {
+    setError('')
+    setActiveStep(step => Math.max(step - 1, 0))
+  }
+
+  function resetForm() {
+    setForm(initialForm)
+    setActiveStep(0)
+    setErrors({})
+    setTouched({})
+    setError('')
+    setResult(null)
+    setCopied(false)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    setSubmitAttempted(true)
-    
-    // First run the full validation logic to get fresh errors
-    const newErrors = buildValidationErrors()
+    const nextErrors = allValidationErrors()
+    setErrors(nextErrors)
+    setTouched(Object.fromEntries(Object.keys(nextErrors).map(field => [field, true])))
 
-    setErrors(newErrors)
-
-    if (Object.keys(newErrors).length > 0) {
-      const firstField = Object.keys(newErrors)[0]
-      const section = sectionForField(firstField)
-      if (section) {
-        scrollToStep(section.id, section.index)
-      }
+    if (Object.keys(nextErrors).length > 0) {
+      const missingField = Object.keys(nextErrors)[0]
+      console.log("Submit validation failed:", missingField)
+      const firstInvalidStep = [0, 1, 2].find(step =>
+        visibleFieldsByStep[step].some(field => nextErrors[field])
+      )
+      setActiveStep(firstInvalidStep ?? 0)
       return
     }
 
     setLoading(true)
-    setError(null)
+    setError('')
     setResult(null)
     setCopied(false)
 
-    const payload = {
+    const profilePayload = {
       full_name: form.full_name.trim(),
-      national_id: form.national_id.trim() || null,
-      registration_number: form.registration_number.trim() || null,
+      national_id: isCitizen ? form.national_id.trim() : null,
+      registration_number: isCitizen ? null : (isLawyerOrSurveyor ? form.license_number.trim() : form.registration_number.trim()),
       contact: {
-        email: form.email.trim() || null,
-        phone: form.phone.trim() || null,
+        email: form.email.trim(),
+        phone: form.phone.trim(),
       },
       address: {
-        city: form.city.trim() || null,
-        neighborhood: form.neighborhood.trim() || null,
-        zone_id: form.zone_id.trim() || null,
+        city: form.city.trim(),
+        neighborhood: form.neighborhood.trim(),
+        zone_id: form.zone_id.trim(),
       },
       applicant_type: form.applicant_type,
-      verification_state: form.verification_state,
       preferred_language: form.preferred_language,
       notification_preferences: {
-        email: form.notify_email,
-        sms: form.notify_sms,
+        email: true,
+        sms: false,
       },
       linked_applications: [],
       privacy_settings: {
-        share_contact_with_staff: form.share_contact_with_staff,
-        allow_status_notifications: form.allow_status_notifications,
+        share_contact_with_staff: false,
+        allow_status_notifications: true,
       },
     }
 
     try {
-      const res = await createApplicant(payload)
-      setResult(res.data)
-      saveApplicantId(res.data.id)
+      console.log("Applicant profile payload:", profilePayload)
+      const savedId = getSavedApplicantId()
+      const res = editMode && savedId
+        ? await updateApplicant(savedId, profilePayload)
+        : await createApplicant({
+            ...profilePayload,
+            verification_state: 'unverified',
+            linked_applications: [],
+          })
+      const fresh = editMode && savedId ? await getApplicant(savedId) : res
+      setResult(fresh.data)
+      saveApplicantId(fresh.data.id)
+      loginApplicant(fresh.data, auth?.token || null)
+      setActiveStep(3)
+      if (editMode) navigate('/applicant/profile')
     } catch (err) {
-      if (err.response?.status === 409) {
-        setError('This National ID or Registration Number already exists. Please use a unique value.')
-      } else {
-        setError(errorMessage(err))
-      }
+      console.log("Create profile backend error:", err.response?.data || err)
+      setError(errorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -270,341 +387,321 @@ export default function CreateApplicantProfile() {
     setCopied(true)
   }
 
-  const isCitizen = form.applicant_type === 'citizen'
-
-  let nationalIdHelper = 'Optional.'
-  if (form.applicant_type === 'lawyer') nationalIdHelper = 'Optional for lawyers.'
-  else if (form.applicant_type === 'company') nationalIdHelper = 'Optional for companies.'
-  else if (form.applicant_type === 'authorized_representative') nationalIdHelper = 'Optional for representatives.'
-  else if (form.applicant_type === 'surveyor') nationalIdHelper = 'Optional for surveyors.'
-
-  let regNumHelper = ''
-  if (form.applicant_type === 'lawyer') regNumHelper = 'Required for lawyers.'
-  else if (form.applicant_type === 'company') regNumHelper = 'Required for companies.'
-  else if (form.applicant_type === 'authorized_representative') regNumHelper = 'Required for representatives.'
-  else if (form.applicant_type === 'surveyor') regNumHelper = 'Required for surveyors.'
-  else if (form.applicant_type === 'citizen') regNumHelper = 'Optional for citizens.'
-
-  function isIdentityComplete() {
-    return !!(form.full_name
-      && !getFieldError('full_name', form.full_name, form.applicant_type)
-      && form.applicant_type
-      && (form.applicant_type === 'citizen'
-        ? (form.national_id && !getFieldError('national_id', form.national_id, form.applicant_type))
-        : (form.registration_number && !getFieldError('registration_number', form.registration_number, form.applicant_type))))
-  }
-
-  function isContactComplete() {
-    return !!(form.email
-      && !getFieldError('email', form.email, form.applicant_type)
-      && form.phone
-      && !getFieldError('phone', form.phone, form.applicant_type))
-  }
-
-  function isAddressComplete() {
-    return !!(form.city
-      && !getFieldError('city', form.city, form.applicant_type)
-      && form.neighborhood
-      && !getFieldError('neighborhood', form.neighborhood, form.applicant_type)
-      && form.zone_id
-      && !getFieldError('zone_id', form.zone_id, form.applicant_type))
-  }
-
-  function isPreferencesComplete() {
-    return Boolean(form.verification_state && form.preferred_language)
-  }
-
-  const steps = [
-    { id: 'personal-section', label: 'Identity', isCompleted: isIdentityComplete() },
-    { id: 'contact-section', label: 'Contact', isCompleted: isContactComplete() },
-    { id: 'address-section', label: 'Address', isCompleted: isAddressComplete() },
-    { id: 'preferences-section', label: 'Preferences', isCompleted: isPreferencesComplete() },
-    { id: 'review-section', label: 'Review', isCompleted: !!result },
-  ]
-
   return (
     <ApplicantLayout>
-        <p className="applicant-page-label">CREATE PROFILE</p>
-        <h1 className="applicant-page-title" style={{ fontSize: '28px', color: '#071b3a', marginTop: '4px' }}>Create Your Profile</h1>
-        <p className="applicant-page-subtitle" style={{ fontSize: '14px', color: '#405875', marginTop: '8px', marginBottom: '12px' }}>
-          Fill in your details to create your applicant profile.
-        </p>
+      {pageLoading ? (
+        <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
+      ) : (
+      <form onSubmit={handleSubmit} noValidate className="applicant-create-shell">
+        <h2 style={{ marginBottom: '1.5rem', fontWeight: 600 }}>
+          {editMode ? 'Edit Profile' : 'Create Profile'}
+        </h2>
+        <HorizontalStepper activeStep={activeStep} result={result} onStepClick={index => {
+          if (index <= activeStep || validateStep(activeStep)) setActiveStep(index)
+        }} isStepValid={isStepValid} />
 
-        <div className="applicant-profile-layout" style={{ marginTop: '20px' }}>
-          <aside className="applicant-profile-rail" style={{ gridColumn: 1, padding: '12px' }}>
-            {steps.map((item, index) => {
-              const isActive = activeStep === index
-              const isCompleted = item.isCompleted
-              const needsAttention = submitAttempted && index < 4 && !isCompleted
+        <section className="applicant-card applicant-wizard-card">
+          {error && <div className="applicant-error applicant-soft-alert">{error}</div>}
 
-              let stepClass = 'applicant-rail-step'
-              if (isActive) stepClass += ' applicant-rail-step-active'
-              if (isCompleted) stepClass += ' applicant-rail-step-completed'
-              if (needsAttention) stepClass += ' applicant-rail-step-warning'
-              if (warningStep === index && needsAttention) stepClass += ' applicant-rail-step-pulse'
+          {activeStep === 0 && (
+            <WizardStep title="Identity" description="Tell us who is creating this applicant profile.">
+              <Select
+                label="Applicant Type"
+                value={form.applicant_type}
+                onChange={value => updateField('applicant_type', value)}
+                options={applicantTypes}
+              />
+              <Field
+                label="Full Name (Legal)"
+                required
+                value={form.full_name}
+                error={touched.full_name ? errors.full_name : ''}
+                success={touched.full_name && !errors.full_name && form.full_name}
+                onChange={value => updateField('full_name', value)}
+                onBlur={() => handleBlur('full_name')}
+                placeholder="Full legal name"
+              />
+              <Field
+                label={identityConfig.label}
+                required
+                value={form[identityConfig.field]}
+                error={touched[identityConfig.field] ? errors[identityConfig.field] : ''}
+                success={touched[identityConfig.field] && !errors[identityConfig.field] && form[identityConfig.field]}
+                onChange={value => updateField(identityConfig.field, value)}
+                onBlur={() => handleBlur(identityConfig.field)}
+                placeholder={identityConfig.placeholder}
+                helper={identityConfig.helper}
+                inputMode={identityConfig.field === 'national_id' ? 'numeric' : undefined}
+              />
+            </WizardStep>
+          )}
 
-              return (
-                <button
-                  key={`${item.id}-${index}`}
-                  type="button"
-                  onClick={() => handleStepClick(item, index)}
-                  className={stepClass}
-                >
-                  <span className="applicant-rail-circle">
-                    {isCompleted ? (
-                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"></path></svg>
-                    ) : (
-                      index + 1
-                    )}
-                  </span>
-                  <span className="applicant-rail-label">{item.label}</span>
-                  {needsAttention && <small>Needs attention</small>}
-                </button>
-              )
-            })}
-          </aside>
+          {activeStep === 1 && (
+            <WizardStep title="Contact" description="Use contact details that staff can use for application updates.">
+              <Field
+                label="Email"
+                required
+                type="email"
+                value={form.email}
+                error={touched.email ? errors.email : ''}
+                success={touched.email && !errors.email && form.email}
+                onChange={value => updateField('email', value)}
+                onBlur={() => handleBlur('email')}
+                placeholder="name@example.com"
+              />
+              <Field
+                label="Phone Number"
+                required
+                type="tel"
+                value={form.phone}
+                error={touched.phone ? errors.phone : ''}
+                success={touched.phone && !errors.phone && form.phone}
+                onChange={value => updateField('phone', value)}
+                onBlur={() => handleBlur('phone')}
+                placeholder="+970599111111"
+              />
+              <Select
+                label="Preferred Language"
+                value={form.preferred_language}
+                onChange={value => updateField('preferred_language', value)}
+                options={languages}
+                helper="Used for applicant-facing messages where supported."
+              />
+            </WizardStep>
+          )}
 
-          <form onSubmit={handleSubmit} noValidate className="applicant-profile-form">
-            <section className="applicant-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {submitAttempted && Object.keys(errors).length > 0 && (
-                <div className="applicant-step-warning-banner">
-                  Please complete the highlighted sections before creating your profile.
-                </div>
-              )}
-              {error && <div className="applicant-error" style={{ margin: 0 }}>{error}</div>}
+          {activeStep === 2 && (
+            <WizardStep title="Address" description="Enter the location details for your applicant profile.">
+              <Field
+                label="City"
+                required
+                value={form.city}
+                error={touched.city ? errors.city : ''}
+                success={touched.city && !errors.city && form.city}
+                onChange={value => updateField('city', value)}
+                onBlur={() => handleBlur('city')}
+                placeholder="e.g. Ramallah"
+              />
+              <Field
+                label="Neighborhood"
+                required
+                value={form.neighborhood}
+                error={touched.neighborhood ? errors.neighborhood : ''}
+                success={touched.neighborhood && !errors.neighborhood && form.neighborhood}
+                onChange={value => updateField('neighborhood', value)}
+                onBlur={() => handleBlur('neighborhood')}
+                placeholder="e.g. Al-Masyoun"
+              />
+              <Select
+                label="Zone / Area Code"
+                required
+                value={form.zone_id}
+                options={[
+                  { value: '', label: zonesLoading ? 'Loading zones...' : 'Select Zone / Area Code', disabled: true },
+                  ...zones.map(zone => ({ value: zone.zone_id, label: zone.label || zone.zone_id })),
+                ]}
+                disabled={zonesLoading || Boolean(zonesError) || zones.length === 0}
+                error={touched.zone_id ? errors.zone_id : ''}
+                success={touched.zone_id && !errors.zone_id && form.zone_id}
+                onChange={value => updateField('zone_id', value)}
+                onBlur={() => handleBlur('zone_id')}
+                helper={zonesError || (!zonesLoading && zones.length === 0 ? 'No zones found in database.' : 'Select the area code from the shared database.')}
+              />
+            </WizardStep>
+          )}
 
-              {result && (
-                <div className="applicant-success" style={{ padding: '12px 16px', margin: '0', borderRadius: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                    <p className="applicant-success-title" style={{ margin: 0, fontSize: '14px' }}>Profile created successfully</p>
-                    <div className="applicant-id-row" style={{ marginTop: 0 }}>
-                      <span className="applicant-badge">{result.id}</span>
-                      <button type="button" onClick={copyApplicantId} className="applicant-button-copy" style={{ padding: '4px 8px', minHeight: 'auto', fontSize: '11px' }}>
-                        {copied ? 'Copied' : 'Copy'}
-                      </button>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-                    <Link to="/applicant/applications" className="applicant-button" style={{ padding: '6px 12px', fontSize: '12px', minHeight: 'auto' }}>Track Applications</Link>
-                    <Link to="/applicant/upload-document" className="applicant-button-secondary" style={{ padding: '6px 12px', fontSize: '12px', minHeight: 'auto' }}>Upload Document</Link>
-                  </div>
-                </div>
-              )}
-
-              <div id="personal-section" style={{ scrollMarginTop: '24px' }} onFocus={() => setActiveStep(0)}>
-                <h2 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 900, color: '#071b3a' }}>Personal Information</h2>
-                {warningStep === 0 && submitAttempted && !isIdentityComplete() && (
-                  <p className="applicant-section-warning">Complete this section before review.</p>
-                )}
-                <div className="applicant-form-grid">
-                <Field
-                  label="Full Name"
-                  required
-                  value={form.full_name}
-                  error={errors.full_name}
-                  onChange={v => updateField('full_name', v)}
-                  onBlur={v => handleBlur('full_name', v)}
-                  placeholder="Arabic or English name"
-                />
-                <Field
-                  label="National ID"
-                  required={isCitizen}
-                  value={form.national_id}
-                  error={errors.national_id}
-                  onChange={v => updateField('national_id', v)}
-                  onBlur={v => handleBlur('national_id', v)}
-                  placeholder="9-digit ID number"
-                  inputMode="numeric"
-                  maxLength={20}
-                  helper={!isCitizen ? nationalIdHelper : ''}
-                />
-                <Field
-                  label="Registration Number"
-                  required={!isCitizen}
-                  value={form.registration_number}
-                  error={errors.registration_number}
-                  onChange={v => updateField('registration_number', v)}
-                  onBlur={v => handleBlur('registration_number', v)}
-                  placeholder="For companies or lawyers"
-                  helper={regNumHelper}
-                />
-                <Select
-                  label="Applicant Type"
-                  value={form.applicant_type}
-                  onChange={v => updateField('applicant_type', v)}
-                  options={applicantTypes}
-                />
-              </div>
-              </div>
-
-              <div style={{ height: '1px', background: '#e2e8f0' }} />
-
-              <div id="contact-section" style={{ scrollMarginTop: '24px' }} onFocus={() => setActiveStep(1)}>
-                <h2 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 900, color: '#071b3a' }}>Contact Details</h2>
-                {warningStep === 1 && submitAttempted && !isContactComplete() && (
-                  <p className="applicant-section-warning">Complete this section before review.</p>
-                )}
-                <div className="applicant-form-grid">
-                <Field
-                  label="Email Address"
-                  required
-                  type="email"
-                  value={form.email}
-                  error={errors.email}
-                  onChange={v => updateField('email', v)}
-                  onBlur={v => handleBlur('email', v)}
-                  placeholder="name@example.com"
-                />
-                <Field
-                  label="Phone Number"
-                  required
-                  type="tel"
-                  value={form.phone}
-                  error={errors.phone}
-                  onChange={v => updateField('phone', v)}
-                  onBlur={v => handleBlur('phone', v)}
-                  placeholder="+970599111111"
-                />
-              </div>
-              </div>
-
-              <div style={{ height: '1px', background: '#e2e8f0' }} />
-
-              <div id="address-section" style={{ scrollMarginTop: '24px' }} onFocus={() => setActiveStep(2)}>
-                <h2 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 900, color: '#071b3a' }}>Address</h2>
-                {warningStep === 2 && submitAttempted && !isAddressComplete() && (
-                  <p className="applicant-section-warning">Complete this section before review.</p>
-                )}
-                <div className="applicant-form-grid">
-                <Field
-                  label="City / Town"
-                  required
-                  value={form.city}
-                  error={errors.city}
-                  onChange={v => updateField('city', v)}
-                  onBlur={v => handleBlur('city', v)}
-                  placeholder="e.g. Ramallah"
-                />
-                <Field
-                  label="Neighborhood"
-                  required
-                  value={form.neighborhood}
-                  error={errors.neighborhood}
-                  onChange={v => updateField('neighborhood', v)}
-                  onBlur={v => handleBlur('neighborhood', v)}
-                  placeholder="e.g. Al-Masyoun"
-                />
-                <Field
-                  label="Zone ID"
-                  required
-                  value={form.zone_id}
-                  error={errors.zone_id}
-                  onChange={v => updateField('zone_id', v)}
-                  onBlur={v => handleBlur('zone_id', v)}
-                  placeholder="e.g. ZONE-RM-01"
-                />
-              </div>
-              </div>
-
-              <div style={{ height: '1px', background: '#e2e8f0' }} />
-
-              <div id="preferences-section" style={{ scrollMarginTop: '24px' }} onFocus={() => setActiveStep(3)}>
-                <h2 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 900, color: '#071b3a' }}>Preferences</h2>
-                {warningStep === 3 && submitAttempted && !isPreferencesComplete() && (
-                  <p className="applicant-section-warning">Complete this section before review.</p>
-                )}
-                <div className="applicant-form-grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-                  <Select label="Verification State" required value={form.verification_state} onChange={v => { updateField('verification_state', v); setPreferencesInteracted(true); }} options={['unverified', 'verified', 'suspended']} />
-                  <Select label="Preferred Language" required value={form.preferred_language} onChange={v => { updateField('preferred_language', v); setPreferencesInteracted(true); }} options={['ar', 'en']} />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '24px', marginTop: '20px' }}>
+          {activeStep === 3 && (
+            <WizardStep title="Review" description="Check your profile details before submitting.">
+              {result ? (
+                <section className="applicant-success applicant-created-panel">
                   <div>
-                    <p style={{ fontSize: '13px', fontWeight: 800, color: '#475569', margin: '0 0 14px', textTransform: 'uppercase' }}>Notification Preferences</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      <Checkbox label="Email notifications" checked={form.notify_email} onChange={v => { updateField('notify_email', v); setPreferencesInteracted(true); }} />
-                      <Checkbox label="SMS notifications" checked={form.notify_sms} onChange={v => { updateField('notify_sms', v); setPreferencesInteracted(true); }} />
-                    </div>
+                    <h2>Profile created successfully</h2>
+                    <p>Your Applicant ID has been saved in this browser.</p>
                   </div>
-                  <div>
-                    <p style={{ fontSize: '13px', fontWeight: 800, color: '#475569', margin: '0 0 14px', textTransform: 'uppercase' }}>Privacy Settings</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      <Checkbox label="Share contact with staff" checked={form.share_contact_with_staff} onChange={v => { updateField('share_contact_with_staff', v); setPreferencesInteracted(true); }} />
-                      <Checkbox label="Allow status notifications" checked={form.allow_status_notifications} onChange={v => { updateField('allow_status_notifications', v); setPreferencesInteracted(true); }} />
-                    </div>
+                  <div className="applicant-id-row">
+                    <span className="applicant-badge">{result.id}</span>
+                    <button type="button" onClick={copyApplicantId} className="applicant-button-copy">
+                      {copied ? 'Copied' : 'Copy ID'}
+                    </button>
                   </div>
-                </div>
-              </div>
+                  <div className="applicant-created-actions">
+                    <Link to="/applicant/applications" className="applicant-button">My Applications</Link>
+                    <Link to="/applicant/settings" className="applicant-button-secondary">Settings</Link>
+                  </div>
+                </section>
+              ) : (
+                <ReviewSummary form={form} />
+              )}
+            </WizardStep>
+          )}
 
-              <div className="applicant-actions" style={{ justifyContent: 'flex-end', marginTop: '8px' }}>
-                <div id="review-section" style={{ scrollMarginTop: '24px' }} />
-                <button type="button" className="applicant-button-secondary" onClick={() => setForm({
-                  full_name: '', national_id: '', registration_number: '', email: '', phone: '', city: '', neighborhood: '', zone_id: '',
-                  applicant_type: 'citizen', verification_state: 'unverified', preferred_language: 'ar', notify_email: true, notify_sms: false, share_contact_with_staff: false, allow_status_notifications: true
-                })}>Cancel</button>
-                <button type="submit" disabled={loading} className="applicant-button">
-                  {loading ? 'Creating...' : 'Create Profile'}
-                </button>
-              </div>
-            </section>
-          </form>
+          <div className="applicant-wizard-actions">
+            <button type="button" className="applicant-button-secondary" onClick={activeStep === 0 ? resetForm : goBack}>
+              {activeStep === 0 ? 'Cancel' : 'Back'}
+            </button>
+            {activeStep < 3 ? (
+              <button type="button" className="applicant-button" onClick={goNext}>
+                Next
+              </button>
+            ) : (
+              <button type="submit" disabled={loading || Boolean(result)} className="applicant-button">
+                {loading ? 'Saving...' : result ? 'Saved Successfully' : editMode ? 'Save Changes' : 'Create Profile'}
+              </button>
+            )}
+          </div>
+        </section>
 
-          <aside className="applicant-card" style={{ padding: '24px', background: '#ffffff', alignSelf: 'start' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
-              <p className="applicant-card-title" style={{ fontSize: '14px', color: '#071b3a', margin: 0 }}>What happens next?</p>
-            </div>
-            <ol style={{ paddingLeft: '0', margin: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <li style={{ fontSize: '13px', color: '#475569' }}>1. Save your Applicant ID</li>
-              <li style={{ fontSize: '13px', color: '#475569' }}>2. Track applications</li>
-              <li style={{ fontSize: '13px', color: '#475569' }}>3. Upload required documents</li>
-              <li style={{ fontSize: '13px', color: '#475569' }}>4. Respond to staff</li>
-              <li style={{ fontSize: '13px', color: '#475569' }}>5. Submit objection if needed</li>
-              <li style={{ fontSize: '13px', color: '#475569' }}>6. Follow timeline</li>
-            </ol>
-          </aside>
-        </div>
+      </form>
+      )}
     </ApplicantLayout>
   )
 }
 
-function Field({ label, value, onChange, onBlur, type = 'text', required = false, placeholder = '', helper = '', error = '', inputMode, maxLength }) {
+function HorizontalStepper({ activeStep, result, onStepClick, isStepValid }) {
   return (
-    <label className="applicant-field">
-      <span>{label}{required && <span style={{ color: '#dc2626', marginLeft: '4px' }}>*</span>}</span>
+    <nav className="applicant-horizontal-stepper" aria-label="Profile creation progress">
+      {steps.map((step, index) => {
+        const done = index === 3 ? Boolean(result) : (isStepValid ? isStepValid(index) : index < activeStep)
+        const active = index === activeStep
+        return (
+          <button
+            key={step}
+            type="button"
+            className={`${active ? 'active' : ''}${done ? ' done' : ''}`}
+            onClick={() => onStepClick(index)}
+          >
+            <span>{done ? '✓' : index + 1}</span>
+            <strong>{step}</strong>
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
+
+function WizardStep({ title, description, children }) {
+  return (
+    <div className="applicant-wizard-step-panel">
+      <div className="applicant-wizard-head">
+        <h2>{title}</h2>
+        <p>{description}</p>
+      </div>
+      <div className="applicant-wizard-fields">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  onBlur,
+  type = 'text',
+  required = false,
+  placeholder = '',
+  helper = '',
+  error = '',
+  success = false,
+  inputMode,
+}) {
+  return (
+    <label className="applicant-field applicant-clean-field">
+      <span>{label}{required && <b>*</b>}</span>
       <input
         type={type}
         aria-required={required}
         value={value}
         placeholder={placeholder}
         inputMode={inputMode}
-        maxLength={maxLength}
         onChange={e => onChange(e.target.value)}
-        onBlur={e => onBlur && onBlur(e.target.value)}
-        className={error ? 'applicant-input-error' : ''}
+        onBlur={onBlur}
+        className={error ? 'applicant-input-error' : success ? 'applicant-input-valid' : ''}
       />
-      {error && <span className="applicant-field-error">{error}</span>}
-      {helper && !error && <small>{helper}</small>}
+      <div className="applicant-field-msg-wrap">
+        {error && <small className="applicant-field-error">{error}</small>}
+        {success && <small className="applicant-field-success">Looks good</small>}
+        {helper && !error && !success && <small className="applicant-field-helper">{helper}</small>}
+      </div>
     </label>
   )
 }
 
-function Select({ label, value, onChange, onBlur, options, required = false, error = '' }) {
+function Select({
+  label,
+  value,
+  onChange,
+  onBlur,
+  options,
+  required = false,
+  helper = '',
+  error = '',
+  success = false,
+  disabled = false,
+}) {
   return (
-    <label className="applicant-field">
-      <span>{label}{required && <span style={{ color: '#dc2626', marginLeft: '4px' }}>*</span>}</span>
-      <select aria-required={required} value={value} onChange={e => onChange(e.target.value)} onBlur={e => onBlur && onBlur(e.target.value)} className={error ? 'applicant-input-error' : ''}>
-        {options.map(option => <option key={option} value={option}>{option}</option>)}
+    <label className="applicant-field applicant-clean-field">
+      <span>{label}{required && <b>*</b>}</span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onBlur={onBlur}
+        aria-required={required}
+        disabled={disabled}
+        className={error ? 'applicant-input-error' : success ? 'applicant-input-valid' : ''}
+      >
+        {options.map(option => (
+          <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
+        ))}
       </select>
-      {error && <span className="applicant-field-error">{error}</span>}
+      <div className="applicant-field-msg-wrap">
+        {error && <small className="applicant-field-error">{error}</small>}
+        {success && <small className="applicant-field-success">Looks good</small>}
+        {helper && !error && !success && <small className="applicant-field-helper">{helper}</small>}
+      </div>
     </label>
   )
 }
 
-function Checkbox({ label, checked, onChange }) {
+function ReviewSummary({ form }) {
+  const identityConfig = identityFieldConfig(form.applicant_type)
+  const identityValue = form[identityConfig.field]
+
   return (
-    <label className="applicant-checkbox">
-      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} />
-      {label}
-    </label>
+    <div className="applicant-review-sections">
+      <ReviewSection title="Identity Information" rows={[
+        ['Full Name', form.full_name],
+        ['Applicant Type', formatApplicantType(form.applicant_type)],
+        [identityConfig.label, identityValue],
+      ]} />
+      <ReviewSection title="Contact Information" rows={[
+        ['Email', form.email],
+        ['Phone', form.phone],
+        ['Preferred Language', formatLanguage(form.preferred_language)],
+      ]} />
+      <ReviewSection title="Address Information" rows={[
+        ['City', form.city],
+        ['Neighborhood', form.neighborhood],
+        ['Zone / Area Code', form.zone_id],
+      ]} />
+    </div>
+  )
+}
+
+
+function ReviewSection({ title, rows }) {
+  return (
+    <article className="applicant-review-section">
+      <h3>{title}</h3>
+      <dl className="applicant-review-dl">
+        {rows.map(([label, value]) => (
+          <div key={label} className="applicant-review-row">
+            <dt>{label}</dt>
+            <dd>{value || 'Not provided'}</dd>
+          </div>
+        ))}
+      </dl>
+    </article>
   )
 }

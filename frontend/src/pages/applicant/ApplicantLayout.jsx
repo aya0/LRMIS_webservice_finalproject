@@ -1,11 +1,12 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { APPLICANT_ID_STORAGE_KEY } from './applicantUx'
 import { useAuth } from '../../context/AuthContext'
 import './applicantPortal.css'
 
 const PRIMARY_NAV_ITEMS = [
-  { to: '/applicant/home', label: 'Home', icon: 'HM' },
+  { to: '/applicant', label: 'Dashboard', icon: 'DB', end: true },
   { to: '/applicant/create-profile', label: 'Create Profile', icon: 'CP' },
+  { to: '/submit', label: 'Submit Application', icon: 'SA' },
   { to: '/applicant/applications', label: 'My Applications', icon: 'MA' },
   { to: '/applicant/upload-document', label: 'Upload Document', icon: 'DO' },
   { to: '/applicant/comment', label: 'Add Comment', icon: 'AC' },
@@ -18,9 +19,26 @@ const SECONDARY_NAV_ITEMS = [
   { to: '/applicant/settings', label: 'Settings', icon: 'ST' },
 ]
 
+const PAGE_TITLES = [
+  { match: '/applicant/home', title: 'Applicant Portal' },
+  { match: '/applicant/dashboard', title: 'Applicant Portal' },
+  { match: '/applicant/create-profile', title: 'Create / Edit Profile' },
+  { match: '/submit', title: 'Submit Application' },
+  { match: '/applicant/applications', title: 'My Applications' },
+  { match: '/applicant/upload-document', title: 'Upload Document' },
+  { match: '/applicant/comment', title: 'Add Comment' },
+  { match: '/applicant/objection', title: 'Submit Objection' },
+  { match: '/applicant/timeline', title: 'Application Timeline' },
+  { match: '/applicant/profile', title: 'My Profile' },
+  { match: '/applicant/settings', title: 'Settings' },
+]
+
 export default function ApplicantLayout({ children, narrow = false }) {
   const navigate = useNavigate()
-  const { logout } = useAuth()
+  const location = useLocation()
+  const { auth, logout } = useAuth()
+  const applicantName = auth?.applicant?.full_name || auth?.applicant?.name || 'Applicant User'
+  const pageTitle = PAGE_TITLES.find(item => location.pathname.startsWith(item.match))?.title || 'Applicant Portal'
 
   function handleLogout() {
     try {
@@ -43,17 +61,17 @@ export default function ApplicantLayout({ children, narrow = false }) {
           </div>
         </div>
 
-        <div className="applicant-sidebar-section">Applicant Portal</div>
-
         <nav className="applicant-sidebar-nav">
           {PRIMARY_NAV_ITEMS.map(item => (
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/applicant/home'}
-              className={({ isActive }) =>
-                `applicant-sidebar-link${isActive ? ' applicant-sidebar-link-active' : ''}`
-              }
+              end={item.end}
+              className={({ isActive }) => {
+                const dashboardActive = item.to === '/applicant'
+                  && ['/applicant', '/applicant/home', '/applicant/dashboard'].includes(location.pathname)
+                return `applicant-sidebar-link${isActive || dashboardActive ? ' applicant-sidebar-link-active' : ''}`
+              }}
             >
               <span>{item.icon}</span>
               {item.label}
@@ -77,7 +95,7 @@ export default function ApplicantLayout({ children, narrow = false }) {
 
           <button type="button" className="applicant-sidebar-link applicant-sidebar-logout" onClick={handleLogout}>
             <span>LO</span>
-            Sign out
+            Logout
           </button>
         </nav>
       </aside>
@@ -85,12 +103,16 @@ export default function ApplicantLayout({ children, narrow = false }) {
       <div className="applicant-main">
         <header className="applicant-header">
           <div className="applicant-header-center">
-            <p className="applicant-header-title">Student 2 - Applicant Portal</p>
-            <p className="applicant-header-meta">Professional &bull; Simple &bull; Clear &bull; Contract Compliant</p>
+            <p className="applicant-header-title">{pageTitle}</p>
           </div>
-          <div className="applicant-online">
-            <span />
-            Applicant
+          <div className="applicant-user-area">
+            <span className="applicant-bell" aria-label="Notifications">NT</span>
+            <div className="applicant-user-avatar">{applicantName.slice(0, 1).toUpperCase()}</div>
+            <div className="applicant-user-copy">
+              <strong>{applicantName}</strong>
+              <span>Applicant</span>
+            </div>
+            <span className="applicant-user-chevron">v</span>
           </div>
         </header>
 

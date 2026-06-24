@@ -33,6 +33,7 @@ export const addNote = (id, body) =>
 export const createParcel = (data) => api.post('/parcels/', data);
 export const listParcels = (params) => api.get('/parcels/', { params });
 export const getParcel = (id) => api.get(`/parcels/${id}`);
+export const getZones = () => api.get('/parcels/zones');
 
 // ── Certificates ───────────────────────────────────────────────────────────────
 export const getCertificate = (id) => api.get(`/certificates/${id}`);

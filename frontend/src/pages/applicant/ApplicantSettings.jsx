@@ -29,12 +29,24 @@ export default function ApplicantSettings() {
       try {
         const res = await getApplicant(applicantId)
         if (!active) return
-        setSettings({
+        
+        let loadedSettings = {
           email: Boolean(res.data.notification_preferences?.email),
           sms: Boolean(res.data.notification_preferences?.sms),
           share: Boolean(res.data.privacy_settings?.share_contact_with_staff),
           tracking: Boolean(res.data.privacy_settings?.allow_status_notifications),
-        })
+        }
+        
+        try {
+          const localStr = localStorage.getItem(`lrmis_applicant_settings_${applicantId}`)
+          if (localStr) {
+            loadedSettings = { ...loadedSettings, ...JSON.parse(localStr) }
+          }
+        } catch (e) {
+          // ignore
+        }
+        
+        setSettings(loadedSettings)
       } catch (err) {
         if (active) setError(friendlyApplicantError(err, 'Unable to load applicant settings.'))
       } finally {
@@ -53,8 +65,18 @@ export default function ApplicantSettings() {
     setSettings(current => ({ ...current, [name]: value }))
   }
 
-  function saveLocal(e) {
+  function saveSettings(e) {
     e.preventDefault()
+    if (!applicantId) {
+      setError('Create or load an applicant profile before saving settings.')
+      return
+    }
+    setError('')
+    try {
+      localStorage.setItem(`lrmis_applicant_settings_${applicantId}`, JSON.stringify(settings))
+    } catch (e) {
+      // Local storage may be full or blocked
+    }
     setSaved(true)
   }
 
@@ -68,11 +90,11 @@ export default function ApplicantSettings() {
       {error && <div className="applicant-error">{error}</div>}
       {saved && (
         <div className="applicant-success">
-          Preferences saved in this browser. A backend update endpoint is not available in Student 2.
+          Settings are saved locally only because backend update endpoint is unavailable.
         </div>
       )}
 
-      <form onSubmit={saveLocal} className="applicant-card applicant-section applicant-settings-grid">
+      <form onSubmit={saveSettings} className="applicant-card applicant-section applicant-settings-grid">
         <section className="applicant-settings-card">
           <p className="applicant-muted-label">Notification Preferences</p>
           <h2>Notification Preferences</h2>
@@ -88,7 +110,9 @@ export default function ApplicantSettings() {
         </section>
 
         <div className="applicant-settings-actions">
-          <button className="applicant-button">Save Changes</button>
+          <button disabled={loading} className="applicant-button">
+            Save Changes
+          </button>
         </div>
       </form>
     </ApplicantLayout>

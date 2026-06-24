@@ -15,7 +15,7 @@ function enabled(value) {
 }
 
 export default function ApplicantProfile() {
-  const applicantId = getSavedApplicantId()
+  const [applicantId, setApplicantId] = useState(getSavedApplicantId())
   const [applicant, setApplicant] = useState(null)
   const [loading, setLoading] = useState(Boolean(applicantId))
   const [error, setError] = useState('')
@@ -34,7 +34,13 @@ export default function ApplicantProfile() {
         const res = await getApplicant(applicantId)
         if (active) setApplicant(res.data)
       } catch (err) {
-        if (active) setError(friendlyApplicantError(err, 'Unable to load applicant profile.'))
+        if (!active) return
+        if (err.response?.status === 404) {
+          localStorage.removeItem('lrmis_applicant_id')
+          setApplicantId('')
+        } else {
+          setError(friendlyApplicantError(err, 'Unable to load applicant profile.'))
+        }
       } finally {
         if (active) setLoading(false)
       }
@@ -52,9 +58,9 @@ export default function ApplicantProfile() {
       <h1 className="applicant-page-title">My Profile</h1>
       <p className="applicant-page-subtitle">View your applicant profile information from the backend record.</p>
 
-      {!applicantId && (
+      {!applicantId && !loading && (
         <section className="applicant-card applicant-section applicant-empty-state">
-          <h2>No profile selected</h2>
+          <h2>No applicant profile found. Please create your profile first.</h2>
           <p>Create an applicant profile first so this page can load your backend profile.</p>
           <Link to="/applicant/create-profile" className="applicant-button">Create Profile</Link>
         </section>
@@ -89,7 +95,12 @@ export default function ApplicantProfile() {
               <dl>
                 <ProfileRow label="Email" value={valueOrEmpty(applicant.contact?.email)} />
                 <ProfileRow label="Phone" value={valueOrEmpty(applicant.contact?.phone)} />
-                <ProfileRow label="Address" value={[applicant.address?.city, applicant.address?.neighborhood, applicant.address?.zone_id].filter(Boolean).join(', ') || 'Not provided'} />
+                <ProfileRow label="Address" value={[
+                  applicant.address?.city,
+                  applicant.address?.neighborhood,
+                  applicant.address?.street,
+                  applicant.address?.zone_id,
+                ].filter(Boolean).join(', ') || 'Not provided'} />
               </dl>
             </article>
             <article className="applicant-profile-card">
