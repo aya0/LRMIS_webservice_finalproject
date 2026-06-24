@@ -1,18 +1,22 @@
 import { useRef, useState } from 'react'
 import { addDocument } from '../../services/applicantApi'
+import {
+  ApplicantApplicationSelect,
+  useApplicantApplications,
+} from './ApplicantApplicationSelect'
 import ApplicantLayout from './ApplicantLayout'
-import { friendlyApplicantError, getSavedApplicantId } from './applicantUx'
+import { friendlyApplicantError } from './applicantUx'
 import './applicantPortal.css'
 
 function errorMessage(err) {
-  return friendlyApplicantError(err, 'Unable to save document metadata. Check the IDs and document fields.')
+  return friendlyApplicantError(err, 'Unable to save document metadata. Check the selected application and document fields.')
 }
 
 export default function UploadDocument() {
   const fileInputRef = useRef(null)
+  const { applicantId, applications, loading: loadingApplications, error: applicationsError } = useApplicantApplications()
   const [form, setForm] = useState({
     application_id: '',
-    applicant_id: getSavedApplicantId(),
     document_type: '',
     description: '',
     file_name: '',
@@ -21,11 +25,10 @@ export default function UploadDocument() {
     file_extension: '',
     status: 'pending_review',
   })
-  const [documentId, setDocumentId] = useState(null)
+  const [successRes, setSuccessRes] = useState(null)
   const [error, setError] = useState(null)
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [recentDocuments, setRecentDocuments] = useState([])
   const [selectedFile, setSelectedFile] = useState(null)
   const [dragActive, setDragActive] = useState(false)
@@ -36,12 +39,10 @@ export default function UploadDocument() {
     value = typeof value === 'string' ? value.trim() : value
     switch(name) {
       case 'application_id':
-        if (!value) return 'Application ID is required.'
-        if (!/^[A-Za-z0-9\-]+$/.test(value)) return 'Application ID can contain letters, numbers, and hyphens only.'
+        if (!value) return 'Choose one of your linked applications.'
         break
-      case 'applicant_id':
-        if (!value) return 'Applicant ID is required.'
-        if (!/^[a-fA-F0-9]{24}$/.test(value)) return 'Applicant ID must be a valid 24-character ID.'
+      case 'applicant':
+        if (!applicantId) return 'No saved applicant profile was found. Create or log in to a profile first.'
         break
       case 'document_type':
         if (!value) return 'Document type is required.'
@@ -66,19 +67,11 @@ export default function UploadDocument() {
   }
 
   function updateField(name, value) {
-    setForm(current => {
-      const newForm = { ...current, [name]: value }
-      if (errors[name]) {
-        const err = validateField(name, value)
-        if (!err) setErrors(prev => ({ ...prev, [name]: '' }))
-      }
-      return newForm
-    })
-  }
-
-  function handleBlur(name, value) {
-    const err = validateField(name, value)
-    setErrors(prev => ({ ...prev, [name]: err || '' }))
+    setForm(current => ({ ...current, [name]: value }))
+    if (errors[name]) {
+      const err = validateField(name, value)
+      if (!err) setErrors(prev => ({ ...prev, [name]: '' }))
+    }
   }
 
   function extensionFromName(fileName) {
@@ -134,9 +127,7 @@ export default function UploadDocument() {
   function handleDragLeave(e) {
     e.preventDefault()
     e.stopPropagation()
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setDragActive(false)
-    }
+    if (!e.currentTarget.contains(e.relatedTarget)) setDragActive(false)
   }
 
   function handleDrop(e) {
@@ -175,9 +166,8 @@ export default function UploadDocument() {
 
   function validateForm() {
     const newErrors = {}
-    const fieldsToValidate = ['application_id', 'applicant_id', 'document_type', 'file_name', 'file_url', 'file_size', 'file_extension']
-    fieldsToValidate.forEach(field => {
-      const err = validateField(field, form[field])
+    ;['application_id', 'applicant', 'document_type', 'file_name', 'file_url', 'file_size', 'file_extension'].forEach(field => {
+      const err = validateField(field, field === 'applicant' ? applicantId : form[field])
       if (err) newErrors[field] = err
     })
     setErrors(newErrors)
@@ -188,21 +178,21 @@ export default function UploadDocument() {
     e.preventDefault()
     if (!validateForm()) return
     setLoading(true)
-    setDocumentId(null)
+    setSuccessRes(null)
     setError(null)
-    setCopied(false)
     const payload = {
-      applicant_id: form.applicant_id.trim(),
+      applicant_id: applicantId,
       document_type: form.document_type.trim(),
       file_name: form.file_name.trim(),
       file_url: form.file_url.trim(),
       file_size: form.file_size ? Number(form.file_size) : null,
       file_extension: form.file_extension.trim() || null,
-      status: form.status,
+      status: 'uploaded',
     }
     try {
-      const res = await addDocument(form.application_id.trim(), payload)
-      setDocumentId(res.data.id)
+      const res = await addDocument(form.application_id, payload)
+      setSuccessRes(res.data)
+      setForm(f => ({ ...f, file_url: '', file_name: '', file_size: '', file_extension: '' }))
       setRecentDocuments(current => [res.data, ...current].slice(0, 5))
     } catch (err) {
       setError(errorMessage(err))
@@ -211,43 +201,66 @@ export default function UploadDocument() {
     }
   }
 
-  async function copyDocumentId() {
-    if (!documentId) return
-    await navigator.clipboard.writeText(documentId)
-    setCopied(true)
-  }
-
-  const canSubmit = ['application_id', 'applicant_id', 'document_type', 'file_name', 'file_url', 'file_extension']
-    .every(field => Boolean(String(form[field] || '').trim()))
+  const canSubmit = Boolean(
+    applicantId &&
+    form.application_id &&
+    form.document_type.trim() &&
+    form.file_name.trim() &&
+    form.file_url.trim() &&
+    form.file_extension.trim() &&
+    applications.length > 0
+  )
 
   return (
     <ApplicantLayout>
       <div className="applicant-upload-page">
         <header className="applicant-upload-page-head">
           <h1>Upload Document</h1>
-          <p>Upload supporting documents for your application.</p>
+          <p>Select a linked application and save supporting document metadata.</p>
         </header>
 
-        {documentId && (
-          <section className="applicant-success applicant-upload-alert">
-            <p className="applicant-success-title">Document saved successfully</p>
-            <div className="applicant-id-row">
-              <span className="applicant-badge">{documentId}</span>
-              <button type="button" onClick={copyDocumentId} className="applicant-button-copy">
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
-          </section>
+        {successRes && (
+            <section className="applicant-success" style={{ padding: '20px', borderRadius: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                <span style={{ fontSize: '20px' }}>✅</span>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Document uploaded successfully</p>
+              </div>
+              <p style={{ margin: '0 0 16px 0', fontSize: '14px', lineHeight: '1.5' }}>
+                Your document metadata has been saved to the application history.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px', background: '#ffffff', padding: '16px', borderRadius: '8px', border: '1px solid #dcfce7', marginBottom: '16px' }}>
+                <div>
+                  <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#166534', textTransform: 'uppercase', fontWeight: 'bold' }}>Application</p>
+                  <p style={{ margin: 0, fontSize: '14px', fontWeight: '500' }}>{form.application_id}</p>
+                </div>
+                {(successRes.document_reference_number || successRes.reference_number) && (
+                  <div>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#166534', textTransform: 'uppercase', fontWeight: 'bold' }}>Reference</p>
+                    <p style={{ margin: 0, fontSize: '14px', fontWeight: '500' }}>{successRes.document_reference_number || successRes.reference_number}</p>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <Link to="/applicant/timeline" className="applicant-button" style={{ background: '#16a34a', borderColor: '#15803d', color: '#fff', textDecoration: 'none' }}>View Timeline</Link>
+              </div>
+            </section>
         )}
+        {applicationsError && <div className="applicant-error applicant-upload-alert">{applicationsError}</div>}
+        {errors.applicant && <div className="applicant-error applicant-upload-alert">{errors.applicant}</div>}
         {error && <div className="applicant-error applicant-upload-alert">{error}</div>}
 
         <div className="applicant-document-layout applicant-upload-layout">
           <form onSubmit={handleSubmit} noValidate className="applicant-card applicant-section applicant-upload-form-card">
             <h2>Upload Document</h2>
-            <div className="applicant-upload-id-row">
-              <Field label="Application ID" required value={form.application_id} error={errors.application_id} onChange={v => updateField('application_id', v)} onBlur={v => handleBlur('application_id', v)} placeholder="e.g. LRMIS-2026-0001" />
-              <Field label="Applicant ID" required value={form.applicant_id} error={errors.applicant_id} onChange={v => updateField('applicant_id', v)} onBlur={v => handleBlur('applicant_id', v)} placeholder="24-character ID" />
-            </div>
+
+            <ApplicantApplicationSelect
+              applications={applications}
+              value={form.application_id}
+              onChange={value => updateField('application_id', value)}
+              error={errors.application_id}
+              loading={loadingApplications}
+              label="Linked Application"
+            />
 
             <div
               className={`applicant-upload-drop${dragActive ? ' applicant-upload-drop-active' : ''}`}
@@ -291,7 +304,7 @@ export default function UploadDocument() {
               )}
             </div>
             <p className="applicant-upload-helper">
-              Selecting a file saves its metadata. The file itself is not uploaded to the server.
+              Selecting a file saves metadata only. The file content is not uploaded to the backend.
             </p>
 
             <div className="applicant-upload-basic-grid">
@@ -301,7 +314,6 @@ export default function UploadDocument() {
                 value={form.document_type}
                 error={errors.document_type}
                 onChange={v => updateField('document_type', v)}
-                onBlur={v => handleBlur('document_type', v)}
                 options={['', 'identity_card', 'ownership_deed', 'sale_contract', 'parcel_map', 'power_of_attorney', 'other']}
               />
               <Field
@@ -315,16 +327,15 @@ export default function UploadDocument() {
             <details className="applicant-document-metadata" open={metadataOpen}>
               <summary>Advanced document metadata</summary>
               <div className="applicant-upload-basic-grid">
-                <Field label="File Name" required value={form.file_name} error={errors.file_name} onChange={v => updateField('file_name', v)} onBlur={v => handleBlur('file_name', v)} placeholder="id-card.pdf" />
-                <Field label="File URL" required value={form.file_url} error={errors.file_url} onChange={v => updateField('file_url', v)} onBlur={v => handleBlur('file_url', v)} placeholder="local://filename.pdf" />
-                <Field label="File Size (bytes)" value={form.file_size} error={errors.file_size} onChange={v => updateField('file_size', v)} onBlur={v => handleBlur('file_size', v)} placeholder="1024" type="text" />
-                <Field label="File Extension" required value={form.file_extension} error={errors.file_extension} onChange={v => updateField('file_extension', v)} onBlur={v => handleBlur('file_extension', v)} placeholder="pdf" />
-                <Select
-                  label="Status"
-                  value={form.status}
-                  onChange={v => updateField('status', v)}
-                  options={['pending_review', 'approved', 'rejected']}
-                />
+                <Field label="File Name" required value={form.file_name} error={errors.file_name} onChange={v => updateField('file_name', v)} placeholder="id-card.pdf" />
+                <Field label="File URL" required value={form.file_url} error={errors.file_url} onChange={v => updateField('file_url', v)} placeholder="local://filename.pdf" />
+                <Field label="File Size (bytes)" value={form.file_size} error={errors.file_size} onChange={v => updateField('file_size', v)} placeholder="1024" type="text" />
+                <Field label="File Extension" required value={form.file_extension} error={errors.file_extension} onChange={v => updateField('file_extension', v)} placeholder="pdf" />
+                <div className="applicant-readonly-status">
+                  <span>Document Metadata Status</span>
+                  <strong className="applicant-status applicant-status-pending-review">{form.status}</strong>
+                  <small>Status is assigned automatically when metadata is submitted.</small>
+                </div>
               </div>
             </details>
 
@@ -336,7 +347,7 @@ export default function UploadDocument() {
 
             <div className="applicant-actions applicant-upload-actions">
               <button type="button" className="applicant-button-secondary" onClick={() => { setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; setForm(current => ({ ...current, document_type: '', description: '', file_name: '', file_url: '', file_size: '', file_extension: '', status: 'pending_review' })); setErrors({}); }}>Cancel</button>
-              <button disabled={loading || !canSubmit} className="applicant-button">
+              <button disabled={loading || loadingApplications || !canSubmit} className="applicant-button">
                 {loading ? 'Saving...' : 'Upload'}
               </button>
             </div>
@@ -358,6 +369,7 @@ export default function UploadDocument() {
               <div className="applicant-empty-panel">
                 <div className="applicant-empty-icon">RD</div>
                 <p>No recent documents yet.</p>
+                <small>Submitted document IDs appear after metadata is saved.</small>
               </div>
             )}
           </aside>
@@ -367,7 +379,7 @@ export default function UploadDocument() {
   )
 }
 
-function Field({ label, value, onChange, onBlur, type = 'text', required = false, placeholder = '', error = '' }) {
+function Field({ label, value, onChange, type = 'text', required = false, placeholder = '', error = '' }) {
   return (
     <label className="applicant-field">
       <span>{label}{required && <span style={{ color: '#dc2626', marginLeft: '4px' }}>*</span>}</span>
@@ -377,7 +389,6 @@ function Field({ label, value, onChange, onBlur, type = 'text', required = false
         value={value}
         placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
-        onBlur={e => onBlur && onBlur(e.target.value)}
         className={error ? 'applicant-input-error' : ''}
       />
       {error && <span className="applicant-field-error">{error}</span>}
@@ -385,11 +396,11 @@ function Field({ label, value, onChange, onBlur, type = 'text', required = false
   )
 }
 
-function Select({ label, value, onChange, onBlur, options, required = false, error = '' }) {
+function Select({ label, value, onChange, options, required = false, error = '' }) {
   return (
     <label className="applicant-field">
       <span>{label}{required && <span style={{ color: '#dc2626', marginLeft: '4px' }}>*</span>}</span>
-      <select aria-required={required} value={value} onChange={e => onChange(e.target.value)} onBlur={e => onBlur && onBlur(e.target.value)} className={error ? 'applicant-input-error' : ''}>
+      <select aria-required={required} value={value} onChange={e => onChange(e.target.value)} className={error ? 'applicant-input-error' : ''}>
         {options.map(option => <option key={option} value={option} disabled={!option}>{option || '-- Select --'}</option>)}
       </select>
       {error && <span className="applicant-field-error">{error}</span>}

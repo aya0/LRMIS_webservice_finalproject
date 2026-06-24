@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pymongo.errors import DuplicateKeyError, OperationFailure
 
 import database as db
-from models.applicant import ApplicantCreate, ApplicantOut
+from models.applicant import ApplicantCreate, ApplicantOut, ApplicantUpdate
 from routes.module2_validation import Module2ValidationRoute
 
 router = APIRouter(route_class=Module2ValidationRoute)
@@ -89,12 +89,13 @@ def _serialize_value(value: Any) -> Any:
     return value
 
 
-def _nonempty_string(value: Any, fallback: str) -> str:
+def _nonempty_string(value: Any):
+    fake_values = {"unknown@example.com", "+97000000000", "Unknown", "ZONE-UNKNOWN"}
     if isinstance(value, str):
         value = value.strip()
-        if value:
+        if value and value not in fake_values:
             return value
-    return fallback
+    return None
 
 
 def _public_applicant(doc: dict) -> dict:
@@ -107,13 +108,13 @@ def _public_applicant(doc: dict) -> dict:
         "national_id": doc.get("national_id") or identity.get("national_id"),
         "registration_number": doc.get("registration_number") or identity.get("registration_number"),
         "contact": {
-            "email": _nonempty_string(contact.get("email"), "unknown@example.com"),
-            "phone": _nonempty_string(contact.get("phone"), "+97000000000"),
+            "email": _nonempty_string(contact.get("email")),
+            "phone": _nonempty_string(contact.get("phone")),
         },
         "address": {
-            "city": _nonempty_string(address.get("city"), "Ramallah"),
-            "neighborhood": _nonempty_string(address.get("neighborhood"), "Unknown"),
-            "zone_id": _nonempty_string(address.get("zone_id"), "ZONE-UNKNOWN"),
+            "city": _nonempty_string(address.get("city")),
+            "neighborhood": _nonempty_string(address.get("neighborhood")),
+            "zone_id": _nonempty_string(address.get("zone_id")),
         },
         "applicant_type": doc.get("applicant_type"),
         "verification_state": doc.get("verification_state"),
@@ -132,13 +133,17 @@ def _serialize_application(doc: dict) -> dict:
     return doc
 
 
+def _enum_value(value: Any) -> Any:
+    return getattr(value, "value", value)
+
+
 @router.post("/applicants/", response_model=ApplicantOut, status_code=201)
 def create_applicant(body: ApplicantCreate):
     """Create an applicant profile."""
-    try:
-        _ensure_applicant_identity_indexes()
-    except OperationFailure as exc:
-        raise HTTPException(status_code=500, detail=f"Applicant identity index setup failed: {exc.details or str(exc)}")
+    # try:
+    #     _ensure_applicant_identity_indexes()
+    # except OperationFailure as exc:
+    #     raise HTTPException(status_code=500, detail=f"Applicant identity index setup failed: {exc.details or str(exc)}")
 
     national_id = body.national_id.strip() if body.national_id else None
     registration_number = body.registration_number.strip() if body.registration_number else None
@@ -197,12 +202,96 @@ def create_applicant(body: ApplicantCreate):
     return _public_applicant(created)
 
 
+@router.patch("/applicants/{applicant_id}", response_model=ApplicantOut)
+def update_applicant(applicant_id: str, body: ApplicantUpdate):
+    """Update applicant-owned profile fields only."""
+    applicant_oid = _object_id(applicant_id, "applicant_id")
+    existing = db.applicants.find_one({"_id": applicant_oid})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Applicant not found.")
+
+    payload = body.model_dump(exclude_unset=True)
+    update_doc = {}
+    unset_doc = {}
+
+    for field in ("full_name", "applicant_type", "preferred_language"):
+        if field in payload:
+            update_doc[field] = payload[field]
+
+    if "contact" in payload:
+        update_doc["contact"] = payload["contact"]
+
+    if "address" in payload:
+        update_doc["address"] = payload["address"]
+
+    applicant_type = _enum_value(payload.get("applicant_type", existing.get("applicant_type")))
+    national_id = payload.get("national_id")
+    registration_number = payload.get("registration_number")
+
+    if applicant_type == "citizen":
+        if "national_id" in payload:
+            if national_id:
+                duplicate = db.applicants.find_one({
+                    "_id": {"$ne": applicant_oid},
+                    "$or": [
+                        {"national_id": national_id},
+                        {"identity.national_id": national_id},
+                    ],
+                }, {"_id": 1})
+                if duplicate:
+                    raise HTTPException(status_code=409, detail="national_id already exists.")
+                update_doc["national_id"] = national_id
+                update_doc["identity.national_id"] = national_id
+            else:
+                unset_doc["national_id"] = ""
+                unset_doc["identity.national_id"] = ""
+        unset_doc["registration_number"] = ""
+        unset_doc["identity.registration_number"] = ""
+    else:
+        if "registration_number" in payload:
+            if registration_number:
+                duplicate = db.applicants.find_one({
+                    "_id": {"$ne": applicant_oid},
+                    "$or": [
+                        {"registration_number": registration_number},
+                        {"identity.registration_number": registration_number},
+                    ],
+                }, {"_id": 1})
+                if duplicate:
+                    raise HTTPException(status_code=409, detail="registration_number already exists.")
+                update_doc["registration_number"] = registration_number
+                update_doc["identity.registration_number"] = registration_number
+            else:
+                unset_doc["registration_number"] = ""
+                unset_doc["identity.registration_number"] = ""
+        unset_doc["national_id"] = ""
+        unset_doc["identity.national_id"] = ""
+
+    if "notification_preferences" in payload:
+        update_doc["notification_preferences"] = payload["notification_preferences"]
+    if "privacy_settings" in payload:
+        update_doc["privacy_settings"] = payload["privacy_settings"]
+
+    update_doc["updated_at"] = datetime.utcnow()
+    operations = {"$set": update_doc}
+    if unset_doc:
+        operations["$unset"] = unset_doc
+
+    try:
+        db.applicants.update_one({"_id": applicant_oid}, operations)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="national_id or registration_number already exists.")
+
+    updated = db.applicants.find_one({"_id": applicant_oid})
+    return _public_applicant(updated)
+
+
 @router.post("/applicants/register", response_model=ApplicantOut, status_code=201)
 def register_applicant(payload: dict):
     """Simplified applicant registration endpoint.
 
     Accepts minimal fields: `full_name`, `national_id` (or `registration_number`), and `password`.
-    Fills reasonable defaults for other required fields to support quick registration for the demo.
+    Does not invent contact or address data when it is not supplied.
     """
     # Basic validation
     full_name = (payload.get("full_name") or "").strip()
@@ -231,8 +320,6 @@ def register_applicant(payload: dict):
         "full_name": full_name,
         "national_id": national_id,
         "registration_number": registration_number,
-        "contact": payload.get("contact") or {"email": "unknown@example.com", "phone": "+97000000000"},
-        "address": payload.get("address") or {"city": "Ramallah", "neighborhood": "Unknown", "zone_id": "ZONE-UNKNOWN"},
         "applicant_type": payload.get("applicant_type") or "citizen",
         "verification_state": "unverified",
         "preferred_language": payload.get("preferred_language") or "ar",
@@ -242,6 +329,24 @@ def register_applicant(payload: dict):
         "created_at": now,
         "updated_at": now,
     }
+
+    if isinstance(payload.get("contact"), dict):
+        contact = {
+            key: value.strip()
+            for key, value in payload["contact"].items()
+            if key in {"email", "phone"} and isinstance(value, str) and value.strip()
+        }
+        if contact:
+            doc["contact"] = contact
+
+    if isinstance(payload.get("address"), dict):
+        address = {
+            key: value.strip()
+            for key, value in payload["address"].items()
+            if key in {"city", "neighborhood", "zone_id"} and isinstance(value, str) and value.strip()
+        }
+        if address:
+            doc["address"] = address
 
     if password:
         doc["password_hash"] = pwd_context.hash(password)

@@ -201,7 +201,8 @@ export default function App() {
     location?.pathname?.startsWith('/tasks') ||
     location?.pathname?.startsWith('/map') ||
     location?.pathname?.startsWith('/analytics') ||
-    location?.pathname?.startsWith('/dashboard')
+    location?.pathname?.startsWith('/dashboard') ||
+    location?.pathname?.startsWith('/submit')
   )
 
   return (
