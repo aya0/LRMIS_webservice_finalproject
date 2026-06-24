@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from bson.errors import InvalidId
 
+import database as db
 from database import land_applications, certificates, parcels
 from models.schemas import (
     ApplicationCreate, ApplicationTransition,
@@ -103,7 +104,7 @@ def create_application(
         "assignment": {
             "assigned_surveyor_id": None,
             "assigned_registrar_id": None,
-            "assignment_policy": "zone+workload+availability",
+            "assignment_policy": "least-workload-first",
         },
         "objection": {"has_objection": False, "objection_ids": []},
         "internal": {"notes": [], "visibility": "staff_only"},
@@ -235,6 +236,8 @@ def list_applications(
     zone_id: Optional[str] = None,
     priority: Optional[str] = None,
     applicant_id: Optional[str] = None,
+    assigned_staff_id: Optional[str] = None,
+    assigned_staff_role: Optional[str] = None,
     sort_by: str = Query("timestamps.submitted_at", description="Field to sort by"),
     sort_order: int = Query(-1, description="1=asc, -1=desc"),
     page: int = Query(1, ge=1),
@@ -252,6 +255,22 @@ def list_applications(
         query["priority"] = priority
     if applicant_id:
         query["applicant_ref.applicant_id"] = applicant_id
+    if assigned_staff_id:
+        staff_ids = [assigned_staff_id]
+        try:
+            staff_ids.append(ObjectId(assigned_staff_id))
+        except Exception:
+            pass
+
+        if assigned_staff_role == "surveyor":
+            query["assignment.assigned_surveyor_id"] = {"$in": staff_ids}
+        elif assigned_staff_role == "registrar":
+            query["assignment.assigned_registrar_id"] = {"$in": staff_ids}
+        else:
+            query["$or"] = [
+                {"assignment.assigned_surveyor_id": {"$in": staff_ids}},
+                {"assignment.assigned_registrar_id": {"$in": staff_ids}},
+            ]
 
     total = land_applications.count_documents(query)
     skip = (page - 1) * page_size
@@ -307,6 +326,16 @@ def transition_application(application_id: str, body: ApplicationTransition):
     if new_state == "legal_review" and doc["timestamps"].get("survey_required_at"):
         delta = (now - doc["timestamps"]["survey_required_at"]).days
         update_kpi(app_id, "survey_delay_days", delta)
+
+    # Automatically create the survey task once the application reaches survey_required.
+    if new_state == "survey_required" and not db.survey_tasks.find_one({"application_id": app_id}):
+        from routes.survey import auto_assign_surveyor
+
+        try:
+            auto_assign_surveyor(app_id)
+        except HTTPException:
+            # Keep the workflow transition successful even if assignment is temporarily unavailable.
+            pass
 
     updated = land_applications.find_one({"application_id": app_id})
     return {"message": f"Application transitioned to '{new_state}'.",

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from passlib.context import CryptContext
 from passlib.hash import pbkdf2_sha256
 from auth import create_access_token

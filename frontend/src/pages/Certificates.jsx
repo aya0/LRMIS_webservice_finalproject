@@ -1,19 +1,62 @@
 import { useState } from 'react';
-import { getCertificate, verifyCertificate } from '../api/client';
+import { getCertificate, getApplicationCertificate, verifyCertificate } from '../api/client';
 
 export default function Certificates() {
   const [certId, setCertId] = useState('');
   const [cert, setCert] = useState(null);
   const [verify, setVerify] = useState(null);
   const [err, setErr] = useState('');
+  const [notice, setNotice] = useState('');
 
   const handleLookup = async () => {
-    setErr(''); setCert(null); setVerify(null);
+    setErr('');
+    setNotice('');
+    setCert(null);
+    setVerify(null);
+
+    const query = certId.trim();
+    if (!query) {
+      setErr('Enter a certificate ID or application ID.');
+      return;
+    }
+
     try {
-      const r = await getCertificate(certId.trim());
-      setCert(r.data);
-      const v = await verifyCertificate(certId.trim());
-      setVerify(v.data);
+      let certificateResponse = null;
+      let certificateLookupId = query;
+
+      try {
+        certificateResponse = await getCertificate(query);
+      } catch (primaryError) {
+        const fallbackResponse = await getApplicationCertificate(query);
+        certificateResponse = fallbackResponse;
+      }
+
+      setCert(certificateResponse.data);
+
+      const certificateIdForVerify = certificateResponse.data?.certificate_id || query;
+      certificateLookupId = certificateIdForVerify;
+
+      if (certificateResponse.data?.status !== 'issued') {
+        setVerify({
+          valid: false,
+          certificate_id: certificateLookupId,
+          application_id: certificateResponse.data?.application_id,
+        });
+        setNotice('This certificate is still in draft state, so it is not valid yet.');
+        return;
+      }
+
+      try {
+        const v = await verifyCertificate(certificateLookupId);
+        setVerify(v.data);
+      } catch (verifyError) {
+        setVerify({
+          valid: false,
+          certificate_id: certificateLookupId,
+          application_id: certificateResponse.data?.application_id,
+        });
+        setNotice(verifyError.response?.data?.detail || 'Certificate verification unavailable.');
+      }
     } catch (e) {
       setErr(e.response?.data?.detail || 'Certificate not found.');
     }
@@ -39,13 +82,14 @@ export default function Certificates() {
         <div className="flex-gap">
           <input
             value={certId} onChange={e => setCertId(e.target.value)}
-            placeholder="e.g. CERT-2026-0001"
+            placeholder="e.g. CERT-2026-0001 or LRMIS-2026-0001"
             style={{ flex: 1, padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.92rem' }}
             onKeyDown={e => e.key === 'Enter' && handleLookup()}
           />
           <button className="btn btn-primary" onClick={handleLookup}>Search</button>
         </div>
         {err && <div className="alert alert-error" style={{ marginTop: 12 }}>{err}</div>}
+        {notice && !err && <div className="alert alert-success" style={{ marginTop: 12 }}>{notice}</div>}
       </div>
 
       {cert && (
@@ -79,7 +123,7 @@ export default function Certificates() {
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
                 <div style={{ fontSize: '3rem' }}>{verify.valid ? '✅' : '❌'}</div>
                 <div style={{ fontSize: '1.2rem', fontWeight: 700, color: verify.valid ? 'var(--accent-dark)' : 'var(--danger)', marginTop: 8 }}>
-                  {verify.valid ? 'VALID CERTIFICATE' : 'INVALID / NOT ISSUED'}
+                  {verify.valid ? 'VALID CERTIFICATE' : 'INVALID / DRAFT'}
                 </div>
                 <div style={{ marginTop: 16, fontSize: '0.88rem', color: 'var(--text-muted)' }}>
                   Digital Signature: <code>{cert.verification?.digital_signature_stub}</code>

@@ -127,12 +127,18 @@ def get_staff(staff_id: str):
     staff = _serialize(staff)
 
     # Workload: count active survey tasks assigned to this staff member
+    query_values = [staff_id]
+    try:
+        query_values.append(ObjectId(staff_id))
+    except Exception:
+        pass
+
     active_tasks = db.survey_tasks.count_documents({
-        "assigned_surveyor_id": staff_id,
+        "assigned_surveyor_id": {"$in": query_values},
         "status": {"$nin": ["survey_completed", "report_uploaded", "registrar_reviewed"]}
     })
     completed_tasks = db.survey_tasks.count_documents({
-        "assigned_surveyor_id": staff_id,
+        "assigned_surveyor_id": {"$in": query_values},
         "status": {"$in": ["survey_completed", "report_uploaded", "registrar_reviewed"]}
     })
 

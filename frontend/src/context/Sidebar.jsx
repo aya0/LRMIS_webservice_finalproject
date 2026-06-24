@@ -2,29 +2,21 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext'
 import logo from '../assets/logo.svg'
 
-const REGISTRAR_LINKS = [
-  { to: '/home',         label: 'Overview' },
-  { to: '/staff',        label: 'Staff Console' },
-  { to: '/applications', label: 'Applications' },
-  { to: '/parcels',      label: 'Parcels' },
-  { to: '/certificates', label: 'Certificates' },
-  { to: '/map',          label: 'Live Map' },
-  { to: '/analytics',    label: 'Analytics' },
-];
-
-const SURVEYOR_LINKS = [
-  { to: '/home',     label: 'Overview' },
-  { to: '/tasks',    label: 'My Tasks',  end: false },
-  { to: '/map',      label: 'Live Map' },
-  { to: '/analytics',label: 'Analytics' },
-];
-
 export default function Sidebar() {
   const { auth, logout } = useAuth()
   const navigate = useNavigate()
   const staff = auth?.staff
   const isSurveyor = staff?.role === 'surveyor'
-  const links = isSurveyor ? SURVEYOR_LINKS : REGISTRAR_LINKS
+  const links = [
+    { to: '/staff', label: 'Staff Console' },
+    { to: '/dashboard', label: 'Dashboard' },
+    ...(isSurveyor ? [{ to: '/tasks', label: 'My Tasks' }] : []),
+    { to: '/applications', label: 'Applications' },
+    { to: '/parcels', label: 'Parcels' },
+    { to: '/certificates', label: 'Certificates' },
+    { to: '/map', label: 'Live Map' },
+    { to: '/analytics', label: 'Analytics' },
+  ]
 
   return (
     <aside className="w-64 bg-[#0f2044] text-white flex flex-col fixed top-0 left-0 h-full z-10 shadow-2xl">
@@ -41,12 +33,8 @@ export default function Sidebar() {
 
       {/* Role badge */}
       <div className="px-6 pt-5 pb-2">
-        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
-          isSurveyor
-            ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-            : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-        }`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${isSurveyor ? 'bg-teal-400' : 'bg-blue-400'}`} />
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
           {isSurveyor ? 'Surveyor' : 'Registrar'}
         </div>
       </div>

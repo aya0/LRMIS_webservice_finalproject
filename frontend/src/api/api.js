@@ -25,6 +25,12 @@ export const createStaff  = (data)   => api.post('/staff/', data)
 export const getStaff     = (id)     => api.get(`/staff/${id}`)
 export const listStaff    = (params) => api.get('/staff/', { params })
 
+// ── Applications ─────────────────────────────────────────────────────────────
+export const listApplications = (params) => api.get('/applications/', { params })
+
+// ── Parcels ───────────────────────────────────────────────────────────────────
+export const listParcels = (params) => api.get('/parcels/', { params })
+
 // ── Survey tasks ──────────────────────────────────────────────────────────────
 export const getSurveyTask     = (appId)              => api.get(`/applications/${appId}/survey-task`)
 export const listSurveyorTasks = (surveyorId, status) =>
@@ -63,8 +69,8 @@ export const getSurveyorAnalytics    = () => api.get('/analytics/surveyors').cat
 export const getRegistrarAnalytics   = () => api.get('/analytics/registrars').catch(() => ({ data: [] }))
 export const getDelayedApplications   = () => api.get('/analytics/delayed-applications').catch(() => ({ data: { count: 0, items: [] } }))
 export const getHotspotZones         = () => api.get('/analytics/hotspot-zones').catch(() => ({ data: [] }))
-export const getParcelGeoFeed        = () => api.get('/analytics/parcel-geo-feed').catch(() => ({ data: { features: [] } }))
-export const getPendingHeatmap       = () => api.get('/analytics/pending-heatmap').catch(() => ({ data: { features: [] } }))
+export const getParcelGeoFeed        = (params) => api.get('/analytics/parcel-geo-feed', { params }).catch(() => ({ data: { features: [] } }))
+export const getPendingHeatmap       = (params) => api.get('/analytics/pending-heatmap', { params }).catch(() => ({ data: { features: [] } }))
 export const getManagementReport     = (format = 'json') => api.get('/analytics/reports/management', { params: { format } })
 export const downloadManagementReport = async (format = 'csv') => {
   const response = await api.get('/analytics/reports/management', {

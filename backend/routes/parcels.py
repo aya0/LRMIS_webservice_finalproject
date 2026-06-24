@@ -42,6 +42,34 @@ def _clean_zone_ids(values):
     return zone_ids
 
 
+def _safe_object_id(value):
+    try:
+        return ObjectId(value)
+    except Exception:
+        return None
+
+
+def _build_application_summary(doc: dict) -> dict:
+    parcel_ref = doc.get("parcel_ref") or {}
+    assignment = doc.get("assignment") or {}
+    return {
+        "application_id": doc.get("application_id"),
+        "status": doc.get("status"),
+        "application_type": doc.get("application_type"),
+        "parcel_ref": {
+            "parcel_id": str(parcel_ref.get("parcel_id")) if parcel_ref.get("parcel_id") is not None else None,
+            "parcel_number": parcel_ref.get("parcel_number"),
+            "block_number": parcel_ref.get("block_number"),
+            "basin_number": parcel_ref.get("basin_number"),
+            "zone_id": parcel_ref.get("zone_id"),
+        },
+        "assignment": {
+            "assigned_surveyor_id": str(assignment.get("assigned_surveyor_id")) if assignment.get("assigned_surveyor_id") is not None else None,
+            "assigned_registrar_id": str(assignment.get("assigned_registrar_id")) if assignment.get("assigned_registrar_id") is not None else None,
+        },
+    }
+
+
 @router.post("/", status_code=201)
 def create_parcel(body: ParcelCreate):
     existing = parcels.find_one({"parcel_code": body.parcel_code})
@@ -136,7 +164,11 @@ def get_parcel(parcel_id: str):
             pass
     if not doc:
         raise HTTPException(status_code=404, detail=f"Parcel '{parcel_id}' not found.")
-    return serialize(doc)
+
+    payload = serialize(doc)
+    app_doc = land_applications.find_one({"parcel_ref.parcel_id": doc["_id"]})
+    payload["application_ref"] = _build_application_summary(app_doc) if app_doc else None
+    return payload
 
 
 @router.get("/")
@@ -144,12 +176,77 @@ def list_parcels(
     zone_id: Optional[str] = None,
     registration_status: Optional[str] = None,
     dispute_state: Optional[str] = None,
+    assigned_staff_id: Optional[str] = None,
+    assigned_staff_role: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
     query = {}
+    visible_parcel_ids = None
+    parcel_summary_by_id = {}
+    if assigned_staff_id:
+        staff_doc = None
+        try:
+            staff_doc = staff_members.find_one({"_id": ObjectId(assigned_staff_id)})
+        except Exception:
+            staff_doc = None
+        if not staff_doc:
+            staff_doc = staff_members.find_one({"staff_code": assigned_staff_id})
+
+        if not staff_doc:
+            return {
+                "total": 0,
+                "page": page,
+                "page_size": page_size,
+                "items": [],
+            }
+
+        staff_role = assigned_staff_role or staff_doc.get("role")
+        staff_values = [assigned_staff_id]
+        safe_oid = _safe_object_id(assigned_staff_id)
+        if safe_oid is not None:
+            staff_values.append(safe_oid)
+
+        if staff_role == "surveyor":
+            app_query = {"assignment.assigned_surveyor_id": {"$in": staff_values}}
+        elif staff_role == "registrar":
+            app_query = {"assignment.assigned_registrar_id": {"$in": staff_values}}
+        else:
+            app_query = {
+                "$or": [
+                    {"assignment.assigned_surveyor_id": {"$in": staff_values}},
+                    {"assignment.assigned_registrar_id": {"$in": staff_values}},
+                ]
+            }
+
+        assigned_apps = list(land_applications.find(app_query, {"application_id": 1, "status": 1, "application_type": 1, "parcel_ref": 1, "assignment": 1}))
+        visible_parcel_ids = []
+        for app in assigned_apps:
+            parcel_ref = app.get("parcel_ref") or {}
+            parcel_oid = parcel_ref.get("parcel_id")
+            if parcel_oid is None:
+                continue
+            if parcel_oid not in parcel_summary_by_id:
+                parcel_summary_by_id[parcel_oid] = _build_application_summary(app)
+                visible_parcel_ids.append(parcel_oid)
+
+        coverage_zone_ids = list(_clean_zone_ids([staff_doc.get("coverage", {}).get("zone_ids", [])]))
+        if coverage_zone_ids:
+            if zone_id and zone_id not in coverage_zone_ids:
+                return {
+                    "total": 0,
+                    "page": page,
+                    "page_size": page_size,
+                    "items": [],
+                }
+            if not zone_id:
+                query["zone_id"] = {"$in": coverage_zone_ids}
+
+        if visible_parcel_ids is not None:
+            query["_id"] = {"$in": visible_parcel_ids}
+
     if zone_id:
-        query["zone_id"] = zone_id
+        query["zone_id"] = zone_id if not isinstance(query.get("zone_id"), dict) else query["zone_id"]
     if registration_status:
         query["registration_status"] = registration_status
     if dispute_state:
@@ -163,5 +260,8 @@ def list_parcels(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [serialize(doc) for doc in cursor],
+        "items": [
+            {**serialize(doc), "application_ref": parcel_summary_by_id.get(doc.get("_id"))}
+            for doc in cursor
+        ],
     }

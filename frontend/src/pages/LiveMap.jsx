@@ -5,7 +5,8 @@
  * Uses: OpenStreetMap + Leaflet (react-leaflet) + leaflet.markercluster
  * PLACEHOLDER: parcel GeoJSON and heatmap from Group module analytics endpoints
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -45,6 +46,21 @@ function parcelStyle(feature) {
     ? STATUS_COLORS.disputed
     : (STATUS_COLORS[status] ?? STATUS_COLORS.default)
   return { color, weight: 2, opacity: 0.9, fillOpacity: 0.2, fillColor: color }
+}
+
+function FitToData({ data, active }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!active || !data?.features?.length) return
+    const layer = L.geoJSON(data)
+    const bounds = layer.getBounds()
+    if (bounds.isValid()) {
+      map.fitBounds(bounds.pad(0.18), { animate: true, duration: 0.6 })
+    }
+  }, [map, data, active])
+
+  return null
 }
 
 function onEachParcel(feature, layer) {
@@ -105,19 +121,33 @@ function MarkerClusterLayer({ features }) {
 }
 
 export default function LiveMap() {
+  const [searchParams] = useSearchParams()
   const [parcels,      setParcels]      = useState(null)
   const [pending,      setPending]      = useState(null)
   const [notice,       setNotice]       = useState(null)
   const [zoneFilter,   setZoneFilter]   = useState('')
+  const [parcelFilter, setParcelFilter] = useState('')
   const [typeFilter,   setTypeFilter]   = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [disputeFilter, setDisputeFilter] = useState('')
 
+  const parcelFromUrl = searchParams.get('parcel') || searchParams.get('parcel_code') || ''
+
   useEffect(() => {
-    Promise.all([getParcelGeoFeed(), getPendingHeatmap()])
+    if (parcelFromUrl && parcelFromUrl !== parcelFilter) {
+      setParcelFilter(parcelFromUrl)
+    }
+  }, [parcelFromUrl])
+
+  useEffect(() => {
+    const params = {}
+    if (zoneFilter) params.zone_id = zoneFilter
+    if (parcelFilter) params.parcel_code = parcelFilter
+
+    Promise.all([getParcelGeoFeed(params), getPendingHeatmap()])
       .then(([p, h]) => { setParcels(p.data); setPending(h.data) })
       .catch(() => setNotice('Parcel and heatmap data will load once the Group analytics module is running.'))
-  }, [])
+  }, [zoneFilter, parcelFilter])
 
   function filterFeatures(geojson) {
     if (!geojson?.features) return geojson
@@ -125,16 +155,27 @@ export default function LiveMap() {
       ...geojson,
       features: geojson.features.filter(f => {
         const p = f.properties ?? {}
-        if (zoneFilter   && p.zone_id             !== zoneFilter)   return false
-        if (typeFilter   && p.application_type    !== typeFilter)    return false
-        if (statusFilter && p.registration_status !== statusFilter)  return false
-        if (disputeFilter && p.dispute_state       !== disputeFilter) return false
+        if (zoneFilter    && p.zone_id       !== zoneFilter)    return false
+        if (parcelFilter  && p.parcel_code   !== parcelFilter)  return false
+        if (disputeFilter && p.dispute_state !== disputeFilter) return false
         return true
       })
     }
   }
 
-  const pendingFeatures = pending?.features ?? []
+  function filterPendingFeatures(features) {
+    return (features ?? []).filter(f => {
+      const p = f.properties ?? {}
+      if (zoneFilter   && p.zone_id          !== zoneFilter)   return false
+      if (parcelFilter && p.parcel_code      !== parcelFilter) return false
+      if (typeFilter   && p.application_type !== typeFilter)   return false
+      if (statusFilter && p.status           !== statusFilter) return false
+      return true
+    })
+  }
+
+  const filteredParcels = useMemo(() => filterFeatures(parcels), [parcels, zoneFilter, parcelFilter, disputeFilter])
+  const pendingFeatures = useMemo(() => filterPendingFeatures(pending?.features), [pending?.features, zoneFilter, parcelFilter, typeFilter, statusFilter])
 
   return (
     <div>
@@ -154,6 +195,15 @@ export default function LiveMap() {
               value={zoneFilter}
               onChange={e => setZoneFilter(e.target.value)}
               placeholder="e.g. ZONE-RM-01"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Parcel Code</label>
+            <input
+              value={parcelFilter}
+              onChange={e => setParcelFilter(e.target.value)}
+              placeholder="e.g. RM-Z01-B12-P145"
               className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -240,12 +290,14 @@ export default function LiveMap() {
           {/* Parcel boundary polygons — GeoJSON from Student 1's parcels collection */}
           {parcels && (
             <GeoJSON
-              key={JSON.stringify({ zoneFilter, typeFilter, statusFilter })}
-              data={filterFeatures(parcels)}
+              key={JSON.stringify({ zoneFilter, parcelFilter, typeFilter, statusFilter, disputeFilter })}
+              data={filteredParcels}
               style={parcelStyle}
               onEachFeature={onEachParcel}
             />
           )}
+
+          <FitToData data={filteredParcels} active={Boolean(parcelFilter)} />
 
           {/* Clustered pending application markers — spec: "use marker clustering" */}
           {pendingFeatures.length > 0 && (

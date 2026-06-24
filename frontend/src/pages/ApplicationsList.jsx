@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { listApplications } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../context/StatusBadge';
 
 const STATUSES = ['','submitted','pre_checked','survey_required','surveyed','legal_review','approved','certificate_issued','closed','rejected','on_hold','missing_documents','under_objection'];
 const TYPES = ['','first_registration','ownership_transfer','parcel_subdivision','parcel_merge','boundary_correction','certificate_request'];
 
 export default function ApplicationsList() {
+  const { auth } = useAuth();
+  const staff = auth?.staff;
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -21,6 +24,10 @@ export default function ApplicationsList() {
     if (filters.application_type) params.application_type = filters.application_type;
     if (filters.zone_id) params.zone_id = filters.zone_id;
     if (filters.priority) params.priority = filters.priority;
+    if (staff?.id) {
+      params.assigned_staff_id = staff.id;
+      params.assigned_staff_role = staff.role;
+    }
 
     listApplications(params).then(res => {
       setItems(res.data.items || []);
@@ -38,9 +45,9 @@ export default function ApplicationsList() {
     <div className="module1-shell">
       <section className="module1-hero">
         <span className="module1-kicker">Module 1 · Land Applications</span>
-        <h1 className="module1-title">Applications management</h1>
+        <h1 className="module1-title">My assigned applications</h1>
         <p className="module1-subtitle">
-          Review, create, replace, and track land registration applications through the full workflow.
+          Review the applications assigned to your staff account and track them through the workflow.
         </p>
 
         <div className="module1-stats" style={{ marginTop: 22 }}>

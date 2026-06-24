@@ -77,7 +77,7 @@ class WorkflowInfo(BaseModel):
 class AssignmentInfo(BaseModel):
     assigned_surveyor_id: Optional[str] = None
     assigned_registrar_id: Optional[str] = None
-    assignment_policy: str = "zone+workload+availability"
+    assignment_policy: str = "least-workload-first"
 
 
 class ObjectionInfo(BaseModel):

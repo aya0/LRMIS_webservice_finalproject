@@ -50,11 +50,12 @@ def create_indexes():
     # Module 3 required indexes (spec page: Required MongoDB Indexes)
     staff_members.create_index("staff_code", unique=True)
     survey_tasks.create_index("application_id")
+    survey_tasks.create_index([("assigned_surveyor_id", ASCENDING), ("status", ASCENDING)])
 
     # Additional useful indexes for Module 3 queries
     survey_tasks.create_index("assigned_surveyor_id")
     survey_tasks.create_index("status")
-    staff_members.create_index("role")
+    staff_members.create_index([("role", ASCENDING), ("active", ASCENDING), ("created_at", ASCENDING)])
     staff_members.create_index("coverage.zone_ids")
     performance_logs.create_index("application_id")
 

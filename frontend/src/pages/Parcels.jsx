@@ -1,7 +1,11 @@
+import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { listParcels, createParcel } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 export default function Parcels() {
+  const { auth } = useAuth();
+  const staff = auth?.staff;
   const [parcels, setParcels] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -17,12 +21,19 @@ export default function Parcels() {
 
   const load = () => {
     setLoading(true);
-    listParcels({ page: 1, page_size: 50 })
+    const params = { page: 1, page_size: 50 };
+    if (staff?.id) {
+      params.assigned_staff_id = staff.id;
+      params.assigned_staff_role = staff.role;
+    }
+    listParcels(params)
       .then(r => { setParcels(r.data.items || []); setTotal(r.data.total); })
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, [staff?.id, staff?.role]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -57,9 +68,9 @@ export default function Parcels() {
     <div className="module1-shell">
       <section className="module1-hero">
         <span className="module1-kicker">Module 1 · Parcel Registry</span>
-        <h1 className="module1-title">Parcel management</h1>
+        <h1 className="module1-title">My assigned parcels</h1>
         <p className="module1-subtitle">
-          Maintain parcel records, geometry, zoning, and ownership references used by the application workflow and map.
+          View the parcels associated with your staff account and zone coverage.
         </p>
 
         <div className="module1-stats" style={{ marginTop: 22 }}>
@@ -142,6 +153,8 @@ export default function Parcels() {
                   <th>Parcel Code</th>
                   <th>Number</th>
                   <th>Block</th>
+                  <th>Application</th>
+                  <th>Map</th>
                   <th>Zone</th>
                   <th>Land Use</th>
                   <th>Area (sqm)</th>
@@ -151,12 +164,34 @@ export default function Parcels() {
               </thead>
               <tbody>
                 {parcels.length === 0
-                  ? <tr><td colSpan={8} className="empty">No parcels found.</td></tr>
+                  ? <tr><td colSpan={10} className="empty">No parcels found.</td></tr>
                   : parcels.map(p => (
                     <tr key={p.id}>
                       <td><strong>{p.parcel_code}</strong></td>
                       <td>{p.parcel_number}</td>
                       <td>{p.block_number}</td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <strong>{p.application_ref?.application_id || '—'}</strong>
+                          {p.application_ref?.status && (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                              {p.application_ref.status}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <Link
+                          to={`/map?parcel=${encodeURIComponent(p.parcel_code)}`}
+                          title="View this parcel on the live map"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M14 8l4 4-4 4" />
+                            <path d="M10 8l-4 4 4 4" />
+                          </svg>
+                        </Link>
+                      </td>
                       <td>{p.zone_id}</td>
                       <td>{p.land_use}</td>
                       <td>{p.area_sqm || '—'}</td>

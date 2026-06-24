@@ -38,3 +38,4 @@ export const getZones = () => api.get('/parcels/zones');
 // ── Certificates ───────────────────────────────────────────────────────────────
 export const getCertificate = (id) => api.get(`/certificates/${id}`);
 export const verifyCertificate = (id) => api.get(`/certificates/${id}/verify`);
+export const getApplicationCertificate = (applicationId) => api.get(`/applications/${applicationId}/certificate`);

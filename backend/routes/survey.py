@@ -17,8 +17,21 @@ router = APIRouter()
 
 
 def _serialize(doc: dict) -> dict:
-    doc["id"] = str(doc.pop("_id"))
-    return doc
+    def convert(value):
+        if isinstance(value, ObjectId):
+            return str(value)
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {key: convert(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [convert(item) for item in value]
+        return value
+
+    serialized = convert(doc.copy())
+    if "_id" in serialized:
+        serialized["id"] = serialized.pop("_id")
+    return serialized
 
 
 def _log_event(application_id: str, event_type: str, actor_type: str,
@@ -47,8 +60,7 @@ def _log_event(application_id: str, event_type: str, actor_type: str,
 @router.post("/applications/{application_id}/auto-assign-surveyor", response_model=dict)
 def auto_assign_surveyor(application_id: str):
     """
-    Automatically assign the best available surveyor to this application.
-    Policy: zone match + availability + workload balancing + skill match + priority + existing tasks.
+    Automatically assign the least-loaded surveyor to this application.
     Application must have status 'survey_required'.
     """
     try:
@@ -56,7 +68,8 @@ def auto_assign_surveyor(application_id: str):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    surveyor_id  = str(surveyor["_id"])
+    surveyor_oid = surveyor["_id"]
+    surveyor_id  = str(surveyor_oid)
     parcel_id    = str((application.get("parcel_ref") or {}).get("parcel_id", ""))
     now          = datetime.now(timezone.utc)
 
@@ -68,14 +81,14 @@ def auto_assign_surveyor(application_id: str):
         "task_id":              task_id,
         "application_id":       application_id,
         "parcel_id":            parcel_id,
-        "assigned_surveyor_id": surveyor_id,
+        "assigned_surveyor_id": surveyor_oid,
         "status":               SurveyMilestoneType.assigned,
         "milestones": [
             {
                 "type": SurveyMilestoneType.assigned,
                 "at":   now,
                 "by":   "system",
-                "meta": {"reason": "auto-assigned via zone+workload+availability+skill policy"},
+                "meta": {"reason": "auto-assigned via least-workload policy"},
             }
         ],
         "field_notes":     [],
@@ -85,9 +98,19 @@ def auto_assign_surveyor(application_id: str):
 
     result = db.survey_tasks.insert_one(task_doc)
 
+    db.land_applications.update_one(
+        {"application_id": application_id},
+        {
+            "$set": {
+                "assignment.assigned_surveyor_id": surveyor_oid,
+                "assignment.assignment_policy": "least-workload-first",
+            }
+        },
+    )
+
     # Update surveyor's active task count
     db.staff_members.update_one(
-        {"_id": ObjectId(surveyor_id)},
+        {"_id": surveyor_oid},
         {"$inc": {"workload.active_tasks": 1}}
     )
 
@@ -354,7 +377,11 @@ def list_surveyor_tasks(surveyor_id: str, status: Optional[str] = None):
     List all survey tasks assigned to a surveyor.
     Used by the Surveyor UI — My Survey Tasks screen.
     """
-    query: dict = {"assigned_surveyor_id": surveyor_id}
+    query: dict = {"assigned_surveyor_id": {"$in": [surveyor_id]}}
+    try:
+        query["assigned_surveyor_id"]["$in"].append(ObjectId(surveyor_id))
+    except Exception:
+        pass
     if status:
         query["status"] = status
 
@@ -388,12 +415,18 @@ def reassign_surveyor(application_id: str, new_surveyor_id: str, reason: str = "
         raise HTTPException(status_code=404, detail="New surveyor not found or not an active surveyor.")
 
     old_surveyor_id = task.get("assigned_surveyor_id")
+    old_surveyor_oid = old_surveyor_id if isinstance(old_surveyor_id, ObjectId) else None
+    if old_surveyor_oid is None and isinstance(old_surveyor_id, str):
+        try:
+            old_surveyor_oid = ObjectId(old_surveyor_id)
+        except Exception:
+            old_surveyor_oid = None
 
     # Adjust workload counters
-    if old_surveyor_id and old_surveyor_id != new_surveyor_id:
+    if old_surveyor_oid and old_surveyor_oid != new_oid:
         try:
             db.staff_members.update_one(
-                {"_id": ObjectId(old_surveyor_id)},
+                {"_id": old_surveyor_oid},
                 {"$inc": {"workload.active_tasks": -1}}
             )
         except Exception:
@@ -407,13 +440,23 @@ def reassign_surveyor(application_id: str, new_surveyor_id: str, reason: str = "
     db.survey_tasks.update_one(
         {"application_id": application_id},
         {
-            "$set":  {"assigned_surveyor_id": new_surveyor_id},
+            "$set":  {"assigned_surveyor_id": new_oid},
             "$push": {"field_notes": {
                 "note":     f"Reassigned to {new_surveyor.get('name', new_surveyor_id)}. Reason: {reason}",
                 "added_by": "system",
                 "added_at": datetime.now(timezone.utc),
             }},
         }
+    )
+
+    db.land_applications.update_one(
+        {"application_id": application_id},
+        {
+            "$set": {
+                "assignment.assigned_surveyor_id": new_oid,
+                "assignment.assignment_policy": "least-workload-first",
+            }
+        },
     )
 
     _log_event(

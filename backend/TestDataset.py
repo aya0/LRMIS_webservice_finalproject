@@ -370,7 +370,7 @@ def seed():
             "assignment": {
                 "assigned_surveyor_id": primary_surveyor_id if status in {"survey_required", "surveyed", "legal_review", "approved", "certificate_issued", "closed", "under_objection"} else None,
                 "assigned_registrar_id": primary_registrar_id if status in {"legal_review", "approved", "certificate_issued", "closed", "rejected", "under_objection"} else None,
-                "assignment_policy": "zone+workload+availability",
+                "assignment_policy": "least-workload-first",
             },
             "objection": {
                 "has_objection": status == "under_objection",

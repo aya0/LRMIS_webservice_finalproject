@@ -83,103 +83,177 @@ def _csv_response(filename: str, rows: list[dict], fieldnames: list[str]):
     )
 
 
+def _as_utc(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _build_management_pdf_bytes(report: dict) -> bytes:
     """Generate a nicely formatted PDF report using fpdf2."""
     ACCENT = (37, 99, 235)
+    ACCENT_2 = (16, 185, 129)
+    ACCENT_3 = (245, 158, 11)
     DARK   = (15, 23, 42)
     MUTED  = (100, 116, 139)
     LIGHT  = (241, 245, 249)
+    PALE   = (248, 250, 252)
+    BORDER = (226, 232, 240)
+    WHITE  = (255, 255, 255)
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
     pdf.set_margins(20, 20, 20)
 
-    pdf.set_fill_color(*ACCENT)
-    pdf.rect(0, 0, 210, 28, style="F")
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_xy(20, 8)
-    pdf.cell(0, 10, "LRMIS - Management Report", ln=False)
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_xy(20, 18)
-    gen = report.get("generated_at", "")[:10]
-    pdf.cell(0, 6, f"Land Registration Management Information System  |  Generated: {gen}")
+    def page_width():
+        return pdf.w - pdf.l_margin - pdf.r_margin
 
-    def section(title: str):
-        pdf.ln(8)
-        pdf.set_fill_color(*LIGHT)
+    def safe_text(value):
+        text = "-" if value is None else str(value)
+        return text.replace("_", " ").title() if isinstance(value, str) else text
+
+    def format_number(value):
+        if value is None:
+            return "0"
+        try:
+            if isinstance(value, float):
+                rounded = round(value, 1)
+                return str(int(rounded)) if rounded.is_integer() else f"{rounded:.1f}"
+            return f"{int(value):,}"
+        except (TypeError, ValueError):
+            return str(value)
+
+    def section_header(title: str, subtitle: str | None = None):
+        pdf.ln(3)
+        pdf.set_fill_color(*PALE)
+        pdf.set_draw_color(*BORDER)
         pdf.set_text_color(*ACCENT)
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(0, 8, f"  {title.upper()}", ln=True, fill=True)
-        pdf.set_text_color(*DARK)
-        pdf.ln(2)
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(page_width(), 9, f"  {title.upper()}", ln=True, fill=True, border=1)
+        if subtitle:
+            pdf.set_text_color(*MUTED)
+            pdf.set_font("Helvetica", "", 8.5)
+            pdf.multi_cell(page_width(), 5, subtitle)
+        pdf.ln(1)
 
-    def kv(label: str, value, width_label=80):
-        pdf.set_font("Helvetica", "", 9)
+    pdf.set_fill_color(*DARK)
+    pdf.rect(0, 0, 210, 42, style="F")
+    pdf.set_fill_color(*ACCENT)
+    pdf.rect(0, 0, 210, 12, style="F")
+    pdf.set_text_color(*WHITE)
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_xy(20, 18)
+    pdf.cell(0, 9, "LRMIS Management Report")
+    pdf.set_xy(20, 27)
+    pdf.set_font("Helvetica", "", 9.5)
+    gen = report.get("generated_at", "")[:10]
+    pdf.cell(0, 6, f"Land Registration Management Information System - Generated {gen}")
+    pdf.set_text_color(*MUTED)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_xy(148, 18)
+    pdf.multi_cell(42, 4, "Operational snapshot\nfor internal review", align="R")
+
+    def metric_card(x, y, w, title, value, color, subtitle=None):
+        pdf.set_xy(x, y)
+        pdf.set_fill_color(*WHITE)
+        pdf.set_draw_color(*BORDER)
+        pdf.rect(x, y, w, 22, style="FD")
+        pdf.set_fill_color(*color)
+        pdf.rect(x, y, 3, 22, style="F")
+        pdf.set_xy(x + 6, y + 4)
         pdf.set_text_color(*MUTED)
-        pdf.cell(width_label, 6, label)
+        pdf.set_font("Helvetica", "", 7.5)
+        pdf.cell(w - 10, 4, title.upper())
+        pdf.set_xy(x + 6, y + 10)
         pdf.set_text_color(*DARK)
-        pdf.set_font("Helvetica", "B", 9)
-        pdf.cell(0, 6, str(value) if value is not None else "-", ln=True)
-        pdf.set_font("Helvetica", "", 9)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(w - 10, 5, value)
+        if subtitle:
+            pdf.set_xy(x + 6, y + 16)
+            pdf.set_text_color(*MUTED)
+            pdf.set_font("Helvetica", "", 7.2)
+            pdf.cell(w - 10, 4, subtitle)
+
+    s = report.get("summary", {})
+    metric_card(20, 47, 40, "Total", format_number(s.get("total_applications")), ACCENT)
+    metric_card(63, 47, 40, "Pending", format_number(s.get("pending_applications")), ACCENT_3)
+    metric_card(106, 47, 40, "Issued", format_number(s.get("certificates_issued")), ACCENT_2)
+    metric_card(149, 47, 41, "Delayed", format_number(s.get("delayed_applications")), (220, 38, 38))
+
+    pdf.set_xy(20, 73)
+    section_header("Key Performance Indicators", "High-level operational summary across the reporting period.")
+
+    s = report.get("summary", {})
+    kpi_rows = [
+        ("Total Applications", s.get("total_applications")),
+        ("Pending Applications", s.get("pending_applications")),
+        ("Approved", s.get("approved_applications")),
+        ("Rejected", s.get("rejected_applications")),
+        ("Under Objection", s.get("applications_under_objection")),
+        ("Certificates Issued", s.get("certificates_issued")),
+        ("Average Processing Time (days)", s.get("avg_processing_days")),
+        ("Delayed Applications (>30d)", s.get("delayed_applications")),
+    ]
+    left_x = 20
+    right_x = 105
+    start_y = pdf.get_y() + 2
+    for idx, (label, value) in enumerate(kpi_rows):
+        x = left_x if idx % 2 == 0 else right_x
+        y = start_y + (idx // 2) * 10
+        pdf.set_xy(x, y)
+        pdf.set_fill_color(*WHITE)
+        pdf.set_draw_color(*BORDER)
+        pdf.rect(x, y, 80, 8, style="FD")
+        pdf.set_xy(x + 4, y + 2.1)
+        pdf.set_text_color(*MUTED)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.cell(55, 4, label)
+        pdf.set_xy(x + 57, y + 2.1)
         pdf.set_text_color(*DARK)
+        pdf.set_font("Helvetica", "B", 8.5)
+        pdf.cell(19, 4, format_number(value), align="R")
+
+    pdf.set_y(start_y + 4 * 10 + 2)
+
+    def section(title: str, subtitle: str | None = None):
+        section_header(title, subtitle)
 
     def row_item(left: str, right: str, accent_right=False):
-        pdf.set_font("Helvetica", "", 9)
+        pdf.set_fill_color(*WHITE)
+        pdf.set_draw_color(*BORDER)
         pdf.set_text_color(*DARK)
-        pdf.cell(130, 5, left)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.cell(128, 7, left, border=1, fill=True)
         if accent_right:
             pdf.set_text_color(*ACCENT)
             pdf.set_font("Helvetica", "B", 9)
-        pdf.cell(0, 5, right, ln=True)
+        else:
+            pdf.set_text_color(*DARK)
+            pdf.set_font("Helvetica", "", 9)
+        pdf.cell(0, 7, right, ln=True, border=1, fill=True)
         pdf.set_text_color(*DARK)
-        pdf.set_font("Helvetica", "", 9)
 
-    pdf.set_xy(20, 36)
-    section("Key Performance Indicators")
-    s = report.get("summary", {})
-    kv("Total Applications",           s.get("total_applications"))
-    kv("Pending Applications",          s.get("pending_applications"))
-    kv("Approved",                      s.get("approved_applications"))
-    kv("Rejected",                      s.get("rejected_applications"))
-    kv("Under Objection",               s.get("applications_under_objection"))
-    kv("Certificates Issued",           s.get("certificates_issued"))
-    kv("Average Processing Time (days)",s.get("avg_processing_days"))
-    kv("Delayed Applications (>30d)",   s.get("delayed_applications"))
-
-    section("Applications by Status")
-    for row in report.get("by_status", []):
-        row_item(str(row.get("status", "-")).replace("_", " ").title(), str(row.get("count", 0)))
-
-    section("Applications by Type")
-    for row in report.get("by_type", []):
-        row_item(str(row.get("application_type", "-")).replace("_", " ").title(), str(row.get("count", 0)))
-
-    section("Top Hotspot Zones")
+    section("Top Hotspot Zones", "Zones with the highest application volume.")
     for row in report.get("hotspot_zones", []):
-        row_item(str(row.get("zone_id", "-")), str(row.get("count", 0)), accent_right=True)
-
-    section("Surveyor Workload")
-    for row in report.get("surveyors", []):
-        row_item(
-            str(row.get("name", "-")),
-            f"Active: {row.get('active_tasks', 0)}  Completed: {row.get('completed_tasks', 0)}"
-        )
+        row_item(str(row.get("zone_id", "-")), format_number(row.get("count", 0)), accent_right=True)
 
     delayed = report.get("delayed_applications", {})
-    section(f"Delayed Applications  ({delayed.get('count', 0)} total)")
+    section(f"Delayed Applications  ({format_number(delayed.get('count', 0))} total)", "Applications still pending beyond the delay threshold.")
     for row in (delayed.get("items") or [])[:15]:
         row_item(
-            f"{row.get('application_id', '-')}  ({row.get('status', '-').replace('_', ' ')})",
-            f"{row.get('delay_days', 0)}d",
+            f"{row.get('application_id', '-')}  ({safe_text(row.get('status', '-'))})",
+            f"{format_number(row.get('delay_days', 0))}d",
             accent_right=True
         )
 
     pdf.ln(12)
     sig_y = pdf.get_y()
-    pdf.set_fill_color(*LIGHT)
-    pdf.rect(20, sig_y, 170, 36, style="F")
+    pdf.set_fill_color(*PALE)
+    pdf.set_draw_color(*BORDER)
+    pdf.rect(20, sig_y, 170, 36, style="FD")
     pdf.set_xy(25, sig_y + 4)
     pdf.set_font("Helvetica", "B", 9)
     pdf.set_text_color(*MUTED)
@@ -188,7 +262,7 @@ def _build_management_pdf_bytes(report: dict) -> bytes:
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(*DARK)
     pdf.cell(55, 6, "Tala Kherawish")
-    pdf.cell(55, 6, "Aya Diebes")
+    pdf.cell(55, 6, "Julia Duaibes")
     pdf.cell(55, 6, "Aya Samara", ln=True)
     pdf.set_xy(25, pdf.get_y())
     pdf.set_font("Helvetica", "", 8)
@@ -277,7 +351,7 @@ def _build_delayed_applications(limit: int = 20):
     items = list(db.land_applications.aggregate(pipeline))
     total = db.land_applications.count_documents({"status": {"$in": PENDING_STATUSES}, "timestamps.submitted_at": {"$lte": cutoff}})
     for item in items:
-        submitted_at = item.get("submitted_at")
+        submitted_at = _as_utc(item.get("submitted_at"))
         if submitted_at:
             item["delay_days"] = max(0, (datetime.now(timezone.utc) - submitted_at).days)
     return {"count": total, "items": items}
@@ -604,6 +678,7 @@ def get_management_report(
 def get_parcel_geofeed(
     force_refresh: bool = Query(False),
     zone_id: str = Query(None),
+    parcel_code: str = Query(None),
     parcel_status: str = Query(None),
     dispute_state: str = Query(None),
     near_lng: float = Query(None),
@@ -614,6 +689,8 @@ def get_parcel_geofeed(
         query = {}
         if zone_id:
             query["zone_id"] = zone_id
+        if parcel_code:
+            query["parcel_code"] = parcel_code
         if parcel_status:
             query["registration_status"] = parcel_status
         if dispute_state:
@@ -660,7 +737,7 @@ def get_parcel_geofeed(
         return {"type": "FeatureCollection", "features": features}
 
     cache_params = {
-        "zone_id": zone_id, "parcel_status": parcel_status,
+        "zone_id": zone_id, "parcel_code": parcel_code, "parcel_status": parcel_status,
         "dispute_state": dispute_state, "near_lng": near_lng,
         "near_lat": near_lat, "max_distance_m": max_distance_m,
     }
