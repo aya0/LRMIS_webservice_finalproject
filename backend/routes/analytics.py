@@ -16,6 +16,11 @@ import io
 import json
 import time
 import database as db
+try:
+    from fpdf import FPDF
+    _FPDF_AVAILABLE = True
+except ImportError:
+    _FPDF_AVAILABLE = False
 
 router = APIRouter(prefix="/analytics", tags=["Analytics & Geofeeds"])
 
@@ -78,54 +83,126 @@ def _csv_response(filename: str, rows: list[dict], fieldnames: list[str]):
     )
 
 
-def _escape_pdf_text(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+def _build_management_pdf_bytes(report: dict) -> bytes:
+    """Generate a nicely formatted PDF report using fpdf2."""
+    ACCENT = (37, 99, 235)
+    DARK   = (15, 23, 42)
+    MUTED  = (100, 116, 139)
+    LIGHT  = (241, 245, 249)
 
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_page()
+    pdf.set_margins(20, 20, 20)
 
-def _pdf_response(filename: str, lines: list[str]):
-    content_lines = ["BT", "/F1 12 Tf"]
-    y = 780
-    for line in lines[:45]:
-        content_lines.append(f"1 0 0 1 50 {y} Tm")
-        content_lines.append(f"({_escape_pdf_text(line)}) Tj")
-        y -= 16
-    content_lines.append("ET")
-    stream = "\n".join(content_lines).encode("latin-1", "replace")
+    pdf.set_fill_color(*ACCENT)
+    pdf.rect(0, 0, 210, 28, style="F")
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_xy(20, 8)
+    pdf.cell(0, 10, "LRMIS - Management Report", ln=False)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_xy(20, 18)
+    gen = report.get("generated_at", "")[:10]
+    pdf.cell(0, 6, f"Land Registration Management Information System  |  Generated: {gen}")
 
-    objects = [
-        b"1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n",
-        b"2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n",
-        b"3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>endobj\n",
-        b"4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n",
-        b"5 0 obj<< /Length " + str(len(stream)).encode("ascii") + b" >>stream\n" + stream + b"\nendstream endobj\n",
-    ]
+    def section(title: str):
+        pdf.ln(8)
+        pdf.set_fill_color(*LIGHT)
+        pdf.set_text_color(*ACCENT)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(0, 8, f"  {title.upper()}", ln=True, fill=True)
+        pdf.set_text_color(*DARK)
+        pdf.ln(2)
 
-    output = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
-    offsets = [0]
-    for obj in objects:
-        offsets.append(len(output))
-        output.extend(obj)
+    def kv(label: str, value, width_label=80):
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(*MUTED)
+        pdf.cell(width_label, 6, label)
+        pdf.set_text_color(*DARK)
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(0, 6, str(value) if value is not None else "-", ln=True)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(*DARK)
 
-    xref_pos = len(output)
-    output.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
-    output.extend(b"0000000000 65535 f \n")
-    for offset in offsets[1:]:
-        output.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
-    output.extend(
-        (
-            "trailer\n"
-            f"<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
-            "startxref\n"
-            f"{xref_pos}\n"
-            "%%EOF"
-        ).encode("ascii")
-    )
+    def row_item(left: str, right: str, accent_right=False):
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(*DARK)
+        pdf.cell(130, 5, left)
+        if accent_right:
+            pdf.set_text_color(*ACCENT)
+            pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(0, 5, right, ln=True)
+        pdf.set_text_color(*DARK)
+        pdf.set_font("Helvetica", "", 9)
 
-    return Response(
-        content=bytes(output),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    pdf.set_xy(20, 36)
+    section("Key Performance Indicators")
+    s = report.get("summary", {})
+    kv("Total Applications",           s.get("total_applications"))
+    kv("Pending Applications",          s.get("pending_applications"))
+    kv("Approved",                      s.get("approved_applications"))
+    kv("Rejected",                      s.get("rejected_applications"))
+    kv("Under Objection",               s.get("applications_under_objection"))
+    kv("Certificates Issued",           s.get("certificates_issued"))
+    kv("Average Processing Time (days)",s.get("avg_processing_days"))
+    kv("Delayed Applications (>30d)",   s.get("delayed_applications"))
+
+    section("Applications by Status")
+    for row in report.get("by_status", []):
+        row_item(str(row.get("status", "-")).replace("_", " ").title(), str(row.get("count", 0)))
+
+    section("Applications by Type")
+    for row in report.get("by_type", []):
+        row_item(str(row.get("application_type", "-")).replace("_", " ").title(), str(row.get("count", 0)))
+
+    section("Top Hotspot Zones")
+    for row in report.get("hotspot_zones", []):
+        row_item(str(row.get("zone_id", "-")), str(row.get("count", 0)), accent_right=True)
+
+    section("Surveyor Workload")
+    for row in report.get("surveyors", []):
+        row_item(
+            str(row.get("name", "-")),
+            f"Active: {row.get('active_tasks', 0)}  Completed: {row.get('completed_tasks', 0)}"
+        )
+
+    delayed = report.get("delayed_applications", {})
+    section(f"Delayed Applications  ({delayed.get('count', 0)} total)")
+    for row in (delayed.get("items") or [])[:15]:
+        row_item(
+            f"{row.get('application_id', '-')}  ({row.get('status', '-').replace('_', ' ')})",
+            f"{row.get('delay_days', 0)}d",
+            accent_right=True
+        )
+
+    pdf.ln(12)
+    sig_y = pdf.get_y()
+    pdf.set_fill_color(*LIGHT)
+    pdf.rect(20, sig_y, 170, 36, style="F")
+    pdf.set_xy(25, sig_y + 4)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(*MUTED)
+    pdf.cell(0, 5, "Prepared and submitted by:", ln=True)
+    pdf.set_xy(25, pdf.get_y() + 2)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(*DARK)
+    pdf.cell(55, 6, "Tala Kherawish")
+    pdf.cell(55, 6, "Aya Diebes")
+    pdf.cell(55, 6, "Aya Samara", ln=True)
+    pdf.set_xy(25, pdf.get_y())
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*MUTED)
+    pdf.cell(55, 5, "Student 3")
+    pdf.cell(55, 5, "Student 2")
+    pdf.cell(55, 5, "Student 1")
+
+    pdf.set_y(-15)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*MUTED)
+    pdf.cell(0, 5, "LRMIS - Land Registration Management Information System  |  COMP4382 Final Project", align="C")
+
+    return pdf.output()
 
 
 def _build_kpi_snapshot():
@@ -147,16 +224,7 @@ def _build_kpi_snapshot():
                 "certificates": [{"$match": {"status": "issued"}}, {"$count": "count"}],
                 "processing": [
                     {"$match": {"status": "approved", "timestamps.approved_at": {"$ne": None}, "timestamps.submitted_at": {"$ne": None}}},
-                    {
-                        "$project": {
-                            "days": {
-                                "$divide": [
-                                    {"$subtract": ["$timestamps.approved_at", "$timestamps.submitted_at"]},
-                                    86400000,
-                                ]
-                            }
-                        }
-                    },
+                    {"$project": {"days": {"$divide": [{"$subtract": ["$timestamps.approved_at", "$timestamps.submitted_at"]}, 86400000]}}},
                     {"$group": {"_id": None, "avg": {"$avg": "$days"}}},
                 ],
                 "pending": [{"$match": {"status": {"$in": PENDING_STATUSES}}}, {"$count": "count"}],
@@ -194,19 +262,12 @@ def _build_delayed_applications(limit: int = 20):
     cutoff = datetime.now(timezone.utc) - timedelta(days=DELAY_DAYS)
     pipeline = [
         {"$match": {"status": {"$in": PENDING_STATUSES}, "timestamps.submitted_at": {"$lte": cutoff}}},
-        {"$lookup": {
-            "from": "parcels",
-            "localField": "parcel_ref.parcel_id",
-            "foreignField": "_id",
-            "as": "parcel",
-        }},
+        {"$lookup": {"from": "parcels", "localField": "parcel_ref.parcel_id", "foreignField": "_id", "as": "parcel"}},
         {"$unwind": {"path": "$parcel", "preserveNullAndEmptyArrays": True}},
         {"$sort": {"timestamps.submitted_at": 1}},
         {"$limit": limit},
         {"$project": {
-            "application_id": 1,
-            "status": 1,
-            "application_type": 1,
+            "application_id": 1, "status": 1, "application_type": 1,
             "submitted_at": "$timestamps.submitted_at",
             "zone_id": "$parcel_ref.zone_id",
             "parcel_number": "$parcel_ref.parcel_number",
@@ -238,40 +299,29 @@ def _build_registrar_workload():
         {"$lookup": {
             "from": "survey_reports",
             "let": {"staff_code": "$staff_code", "staff_id": {"$toString": "$_id"}},
-            "pipeline": [
-                {"$match": {"$expr": {"$or": [
-                    {"$eq": [{"$toString": "$registrar_review.registrar_id"}, "$$staff_code"]},
-                    {"$eq": [{"$toString": "$registrar_review.registrar_id"}, "$$staff_id"]},
-                ]}}}
-            ],
+            "pipeline": [{"$match": {"$expr": {"$or": [
+                {"$eq": [{"$toString": "$registrar_review.registrar_id"}, "$$staff_code"]},
+                {"$eq": [{"$toString": "$registrar_review.registrar_id"}, "$$staff_id"]},
+            ]}}}],
             "as": "reviews",
         }},
         {"$lookup": {
             "from": "land_applications",
             "let": {"staff_code": "$staff_code", "staff_id": {"$toString": "$_id"}},
-            "pipeline": [
-                {"$match": {"$expr": {"$or": [
-                    {"$eq": [{"$toString": "$assignment.assigned_registrar_id"}, "$$staff_code"]},
-                    {"$eq": [{"$toString": "$assignment.assigned_registrar_id"}, "$$staff_id"]},
-                ]}}}
-            ],
+            "pipeline": [{"$match": {"$expr": {"$or": [
+                {"$eq": [{"$toString": "$assignment.assigned_registrar_id"}, "$$staff_code"]},
+                {"$eq": [{"$toString": "$assignment.assigned_registrar_id"}, "$$staff_id"]},
+            ]}}}],
             "as": "assigned_applications",
         }},
         {"$project": {
-            "_id": 0,
-            "name": 1,
-            "staff_code": 1,
+            "_id": 0, "name": 1, "staff_code": 1,
             "review_count": {"$size": "$reviews"},
             "assigned_applications": {"$size": "$assigned_applications"},
-            "inbox_backlog": {
-                "$size": {
-                    "$filter": {
-                        "input": "$reviews",
-                        "as": "review",
-                        "cond": {"$in": ["$$review.status", ["draft", "pending", "review_requested"]]}
-                    }
-                }
-            },
+            "inbox_backlog": {"$size": {"$filter": {
+                "input": "$reviews", "as": "review",
+                "cond": {"$in": ["$$review.status", ["draft", "pending", "review_requested"]]}
+            }}},
         }},
         {"$sort": {"review_count": -1, "assigned_applications": -1}},
     ]
@@ -284,31 +334,12 @@ def _build_management_report():
     hotspots = _build_hotspot_zones(limit=10)
     registrars = _build_registrar_workload()
     surveyors = get_surveyor_analytics()
-
-    processing_buckets = list(db.land_applications.aggregate([
-        {"$match": {"status": "approved", "timestamps.approved_at": {"$ne": None}, "timestamps.submitted_at": {"$ne": None}}},
-        {"$project": {
-            "days": {
-                "$divide": [
-                    {"$subtract": ["$timestamps.approved_at", "$timestamps.submitted_at"]},
-                    86400000,
-                ]
-            }
-        }},
-        {"$bucketAuto": {"groupBy": "$days", "buckets": 5}},
-    ]))
-
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "summary": {k: snapshot[k] for k in [
-            "total_applications",
-            "pending_applications",
-            "approved_applications",
-            "rejected_applications",
-            "applications_under_objection",
-            "certificates_issued",
-            "avg_processing_days",
-            "delayed_applications",
+            "total_applications", "pending_applications", "approved_applications",
+            "rejected_applications", "applications_under_objection", "certificates_issued",
+            "avg_processing_days", "delayed_applications",
         ]},
         "by_status": snapshot["by_status"],
         "by_type": snapshot["by_type"],
@@ -316,7 +347,6 @@ def _build_management_report():
         "registrars": registrars,
         "surveyors": surveyors,
         "delayed_applications": delayed,
-        "processing_buckets": processing_buckets,
     }
 
 
@@ -333,7 +363,7 @@ def _build_management_csv(report: dict) -> list[dict]:
     for row in report["registrars"]:
         rows.append({"section": "registrars", "metric": row.get("name"), "value": row.get("review_count"), "details": f"assigned={row.get('assigned_applications', 0)} backlog={row.get('inbox_backlog', 0)}"})
     for row in report["surveyors"]:
-        rows.append({"section": "surveyors", "metric": row.get("name"), "value": row.get("active_tasks"), "details": f"completed={row.get('completed_tasks', 0)} max={row.get('max_tasks', 0)}"})
+        rows.append({"section": "surveyors", "metric": row.get("name"), "value": row.get("active_tasks"), "details": f"completed={row.get('completed_tasks', 0)}"})
     for row in report["delayed_applications"]["items"]:
         rows.append({"section": "delayed_applications", "metric": row.get("application_id"), "value": row.get("delay_days"), "details": f"status={row.get('status')} zone={row.get('zone_id')}"})
     return rows
@@ -342,22 +372,13 @@ def _build_management_csv(report: dict) -> list[dict]:
 # ── GET /analytics/kpis ───────────────────────────────────────────────────────
 @router.get("/kpis")
 def get_kpis(force_refresh: bool = Query(False)):
-    """
-    Return system-wide KPI counts.
-    Used by: Analytics.jsx KPI cards row.
-    """
     return _cached_json("kpis", _build_kpi_snapshot, force_refresh=force_refresh)
 
 
-# ── GET /analytics/by-status ────────────────────────────────────────────────
+# ── GET /analytics/by-status ─────────────────────────────────────────────────
 @router.get("/by-status")
 @router.get("/applications-by-status")
 def get_applications_by_status(force_refresh: bool = Query(False)):
-    """
-    Return count of applications grouped by status.
-    Used by: Analytics.jsx "Applications by Status" bar chart.
-    Returns: [{ "status": "submitted", "count": 5 }, ...]
-    """
     return _cached_json("applications_by_status", lambda: _build_kpi_snapshot()["by_status"], force_refresh=force_refresh)
 
 
@@ -365,7 +386,6 @@ def get_applications_by_status(force_refresh: bool = Query(False)):
 @router.get("/by-type")
 @router.get("/applications-by-type")
 def get_applications_by_type(force_refresh: bool = Query(False)):
-    """Return count of applications grouped by type."""
     return _cached_json("applications_by_type", lambda: _build_kpi_snapshot()["by_type"], force_refresh=force_refresh)
 
 
@@ -373,11 +393,6 @@ def get_applications_by_type(force_refresh: bool = Query(False)):
 @router.get("/by-zone")
 @router.get("/applications-by-zone")
 def get_applications_by_zone(force_refresh: bool = Query(False)):
-    """
-    Return count of pending applications grouped by zone.
-    Used by: Analytics.jsx "Pending Applications by Zone" bar chart.
-    Returns: [{ "zone_id": "ZONE-RM-01", "count": 3 }, ...]
-    """
     def _builder():
         pipeline = [
             {"$match": {"status": {"$in": PENDING_STATUSES}}},
@@ -386,33 +401,19 @@ def get_applications_by_zone(force_refresh: bool = Query(False)):
             {"$sort": {"count": -1}},
         ]
         return list(db.land_applications.aggregate(pipeline))
-
     return _cached_json("applications_by_zone", _builder, force_refresh=force_refresh)
 
 
 # ── GET /analytics/processing-time ───────────────────────────────────────────
 @router.get("/processing-time")
 def get_processing_time(force_refresh: bool = Query(False)):
-    """
-    Return average processing time in days grouped by application type.
-    Used by: Analytics.jsx "Average Processing Time" bar chart.
-    Returns: [{ "application_type": "ownership_transfer", "avg_days": 12.3 }, ...]
-    """
     pipeline = [
         {"$match": {"status": "approved", "timestamps.approved_at": {"$ne": None}}},
         {"$project": {
             "application_type": 1,
-            "days": {
-                "$divide": [
-                    {"$subtract": ["$timestamps.approved_at", "$timestamps.submitted_at"]},
-                    86400000
-                ]
-            }
+            "days": {"$divide": [{"$subtract": ["$timestamps.approved_at", "$timestamps.submitted_at"]}, 86400000]}
         }},
-        {"$group": {
-            "_id": "$application_type",
-            "avg_days": {"$avg": "$days"}
-        }},
+        {"$group": {"_id": "$application_type", "avg_days": {"$avg": "$days"}}},
         {"$project": {"_id": 0, "application_type": "$_id", "avg_days": {"$round": ["$avg_days", 1]}}},
         {"$sort": {"avg_days": -1}},
     ]
@@ -422,60 +423,35 @@ def get_processing_time(force_refresh: bool = Query(False)):
 # ── GET /analytics/surveyors ──────────────────────────────────────────────────
 @router.get("/surveyors")
 def get_surveyor_analytics(force_refresh: bool = Query(False)):
-    """
-    Return workload summary per surveyor.
-    Used by: Analytics.jsx "Surveyor Workload" grouped bar chart.
-    Returns: [{ "name": "Survey Team A", "active_tasks": 4, "completed_tasks": 7 }, ...]
-    """
     def _builder():
-        surveyors = list(db.staff_members.aggregate([
+        return list(db.staff_members.aggregate([
             {"$match": {"role": "surveyor", "active": True}},
             {"$lookup": {
                 "from": "survey_tasks",
-                "let": {"staff_code": "$staff_code", "staff_id": {"$toString": "$_id"}},
-                "pipeline": [
-                    {"$match": {"$expr": {"$or": [
-                        {"$eq": [{"$toString": "$assigned_surveyor_id"}, "$$staff_id"]},
-                        {"$eq": [{"$toString": "$assigned_surveyor_id"}, "$$staff_code"]},
-                    ]}}}
-                ],
+                "let": {"staff_id": {"$toString": "$_id"}},
+                "pipeline": [{"$match": {"$expr": {"$eq": [{"$toString": "$assigned_surveyor_id"}, "$$staff_id"]}}}],
                 "as": "tasks",
             }},
             {"$project": {
-                "_id": 0,
-                "name": 1,
-                "staff_code": 1,
+                "_id": 0, "name": 1, "staff_code": 1,
                 "max_tasks": {"$ifNull": ["$workload.max_tasks", 10]},
-                "active_tasks": {
-                    "$size": {
-                        "$filter": {
-                            "input": "$tasks",
-                            "as": "task",
-                            "cond": {"$not": [{"$in": ["$$task.status", ["survey_completed", "report_uploaded", "registrar_reviewed"]]}]}
-                        }
-                    }
-                },
-                "completed_tasks": {
-                    "$size": {
-                        "$filter": {
-                            "input": "$tasks",
-                            "as": "task",
-                            "cond": {"$in": ["$$task.status", ["survey_completed", "report_uploaded", "registrar_reviewed"]]}
-                        }
-                    }
-                },
+                "active_tasks": {"$size": {"$filter": {
+                    "input": "$tasks", "as": "task",
+                    "cond": {"$not": [{"$in": ["$$task.status", ["survey_completed", "report_uploaded", "registrar_reviewed"]]}]}
+                }}},
+                "completed_tasks": {"$size": {"$filter": {
+                    "input": "$tasks", "as": "task",
+                    "cond": {"$in": ["$$task.status", ["survey_completed", "report_uploaded", "registrar_reviewed"]]}
+                }}},
             }},
-            {"$sort": {"active_tasks": -1, "completed_tasks": -1}},
+            {"$sort": {"active_tasks": -1}},
         ]))
-        return surveyors
-
     return _cached_json("surveyor_analytics", _builder, force_refresh=force_refresh)
 
 
 # ── GET /analytics/registrars ────────────────────────────────────────────────
 @router.get("/registrars")
 def get_registrar_analytics(force_refresh: bool = Query(False)):
-    """Return registrar review workload analytics."""
     return _cached_json("registrar_analytics", _build_registrar_workload, force_refresh=force_refresh)
 
 
@@ -483,32 +459,13 @@ def get_registrar_analytics(force_refresh: bool = Query(False)):
 @router.get("/certs-per-month")
 @router.get("/certificates-per-month")
 def get_certificates_per_month(force_refresh: bool = Query(False)):
-    """
-    Return count of certificates issued grouped by month.
-    Used by: Analytics.jsx "Certificates Issued per Month" bar chart.
-    Returns: [{ "month": "2026-02", "count": 3 }, ...]
-    """
     pipeline = [
         {"$match": {"status": "issued"}},
-        {"$group": {
-            "_id": {
-                "year":  {"$year":  "$issued_at"},
-                "month": {"$month": "$issued_at"},
-            },
-            "count": {"$sum": 1}
-        }},
-        {"$project": {
-            "_id": 0,
-            "month": {
-                "$concat": [
-                    {"$toString": "$_id.year"}, "-",
-                    {"$cond": [{"$lt": ["$_id.month", 10]},
-                               {"$concat": ["0", {"$toString": "$_id.month"}]},
-                               {"$toString": "$_id.month"}]}
-                ]
-            },
-            "count": 1,
-        }},
+        {"$group": {"_id": {"year": {"$year": "$issued_at"}, "month": {"$month": "$issued_at"}}, "count": {"$sum": 1}}},
+        {"$project": {"_id": 0, "month": {"$concat": [
+            {"$toString": "$_id.year"}, "-",
+            {"$cond": [{"$lt": ["$_id.month", 10]}, {"$concat": ["0", {"$toString": "$_id.month"}]}, {"$toString": "$_id.month"}]}
+        ]}, "count": 1}},
         {"$sort": {"month": 1}},
     ]
     return _cached_json("certificates_per_month", lambda: list(db.certificates.aggregate(pipeline)), force_refresh=force_refresh)
@@ -518,32 +475,13 @@ def get_certificates_per_month(force_refresh: bool = Query(False)):
 @router.get("/objections")
 @router.get("/objection-stats")
 def get_objection_stats(force_refresh: bool = Query(False)):
-    """
-    Return count of applications under objection grouped by month submitted.
-    Used by: Analytics.jsx "Applications under Objection" line chart.
-    Returns: [{ "month": "2026-02", "count": 1 }, ...]
-    """
     pipeline = [
         {"$match": {"status": "under_objection"}},
-        {"$group": {
-            "_id": {
-                "year":  {"$year":  "$timestamps.submitted_at"},
-                "month": {"$month": "$timestamps.submitted_at"},
-            },
-            "count": {"$sum": 1}
-        }},
-        {"$project": {
-            "_id": 0,
-            "month": {
-                "$concat": [
-                    {"$toString": "$_id.year"}, "-",
-                    {"$cond": [{"$lt": ["$_id.month", 10]},
-                               {"$concat": ["0", {"$toString": "$_id.month"}]},
-                               {"$toString": "$_id.month"}]}
-                ]
-            },
-            "count": 1,
-        }},
+        {"$group": {"_id": {"year": {"$year": "$timestamps.submitted_at"}, "month": {"$month": "$timestamps.submitted_at"}}, "count": {"$sum": 1}}},
+        {"$project": {"_id": 0, "month": {"$concat": [
+            {"$toString": "$_id.year"}, "-",
+            {"$cond": [{"$lt": ["$_id.month", 10]}, {"$concat": ["0", {"$toString": "$_id.month"}]}, {"$toString": "$_id.month"}]}
+        ]}, "count": 1}},
         {"$sort": {"month": 1}},
     ]
     return _cached_json("objection_stats", lambda: list(db.land_applications.aggregate(pipeline)), force_refresh=force_refresh)
@@ -552,25 +490,13 @@ def get_objection_stats(force_refresh: bool = Query(False)):
 # ── GET /analytics/hotspot-zones ─────────────────────────────────────────────
 @router.get("/hotspot-zones")
 def get_hotspot_zones(force_refresh: bool = Query(False), limit: int = Query(10, ge=1, le=25)):
-    """Return the busiest zones by application volume."""
-    return _cached_json(
-        "hotspot_zones",
-        lambda: _build_hotspot_zones(limit=limit),
-        force_refresh=force_refresh,
-        limit=limit,
-    )
+    return _cached_json("hotspot_zones", lambda: _build_hotspot_zones(limit=limit), force_refresh=force_refresh, limit=limit)
 
 
 # ── GET /analytics/delayed-applications ──────────────────────────────────────
 @router.get("/delayed-applications")
 def get_delayed_applications(force_refresh: bool = Query(False), limit: int = Query(20, ge=1, le=100)):
-    """Return delayed applications and the total delayed count."""
-    return _cached_json(
-        "delayed_applications",
-        lambda: _build_delayed_applications(limit=limit),
-        force_refresh=force_refresh,
-        limit=limit,
-    )
+    return _cached_json("delayed_applications", lambda: _build_delayed_applications(limit=limit), force_refresh=force_refresh, limit=limit)
 
 
 # ── GET /analytics/reports/management ───────────────────────────────────────
@@ -579,7 +505,6 @@ def get_management_report(
     force_refresh: bool = Query(False),
     format: str = Query("json", pattern="^(json|csv|pdf)$"),
 ):
-    """Generate a management report in JSON, CSV, or PDF format."""
     report = _cached_json("management_report", _build_management_report, force_refresh=force_refresh)
 
     if format == "json":
@@ -587,36 +512,20 @@ def get_management_report(
 
     if format == "csv":
         rows = _build_management_csv(report)
-        return _csv_response(
-            "lrmis-management-report.csv",
-            rows,
-            ["section", "metric", "value", "details"],
-        )
+        return _csv_response("lrmis-management-report.csv", rows, ["section", "metric", "value", "details"])
 
-    lines = [
-        "LRMIS Management Report",
-        f"Generated: {report['generated_at']}",
-        "",
-    ]
-    for metric, value in report["summary"].items():
-        lines.append(f"{metric}: {value}")
-    lines.append("")
-    lines.append("Top hotspot zones:")
-    for row in report["hotspot_zones"]:
-        lines.append(f"- {row.get('zone_id', '—')}: {row.get('count', 0)}")
-    lines.append("")
-    lines.append("Registrar workload:")
-    for row in report["registrars"]:
-        lines.append(
-            f"- {row.get('name', '—')}: reviews={row.get('review_count', 0)} assigned={row.get('assigned_applications', 0)} backlog={row.get('inbox_backlog', 0)}"
+    if not _FPDF_AVAILABLE:
+        return Response(
+            content="fpdf2 not installed. Run: pip install fpdf2",
+            media_type="text/plain",
+            status_code=503,
         )
-    lines.append("")
-    lines.append(f"Delayed applications: {report['delayed_applications']['count']}")
-    for row in report["delayed_applications"]["items"][:10]:
-        lines.append(
-            f"- {row.get('application_id', '—')}: {row.get('delay_days', 0)} days ({row.get('status', '—')})"
-        )
-    return _pdf_response("lrmis-management-report.pdf", lines)
+    pdf_bytes = _build_management_pdf_bytes(report)
+    return Response(
+        content=bytes(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="lrmis-management-report.pdf"'},
+    )
 
 
 # ── GET /analytics/parcel-geo-feed ───────────────────────────────────────────
@@ -631,14 +540,6 @@ def get_parcel_geofeed(
     near_lat: float = Query(None),
     max_distance_m: float = Query(5000),
 ):
-    """
-    Return all parcels as a GeoJSON FeatureCollection.
-    Used by: LiveMap.jsx parcel boundary polygons layer.
-
-    Each feature includes properties:
-      parcel_number, block_number, basin_number, zone_id,
-      registration_status, dispute_state, area_sqm
-    """
     def _builder():
         query = {}
         if zone_id:
@@ -651,27 +552,18 @@ def get_parcel_geofeed(
         features = []
         if near_lat is not None and near_lng is not None:
             pipeline = [
-                {
-                    "$geoNear": {
-                        "near": {"type": "Point", "coordinates": [near_lng, near_lat]},
-                        "distanceField": "distance_m",
-                        "spherical": True,
-                        "key": "geometry",
-                        "maxDistance": max_distance_m,
-                    }
-                },
+                {"$geoNear": {
+                    "near": {"type": "Point", "coordinates": [near_lng, near_lat]},
+                    "distanceField": "distance_m",
+                    "spherical": True,
+                    "key": "geometry",
+                    "maxDistance": max_distance_m,
+                }},
                 {"$match": query} if query else {"$match": {}},
                 {"$project": {
-                    "geometry": 1,
-                    "parcel_number": 1,
-                    "block_number": 1,
-                    "basin_number": 1,
-                    "zone_id": 1,
-                    "registration_status": 1,
-                    "dispute_state": 1,
-                    "area_sqm": 1,
-                    "parcel_code": 1,
-                    "distance_m": 1,
+                    "geometry": 1, "parcel_number": 1, "block_number": 1,
+                    "basin_number": 1, "zone_id": 1, "registration_status": 1,
+                    "dispute_state": 1, "area_sqm": 1, "parcel_code": 1, "distance_m": 1,
                 }},
             ]
             docs = list(db.parcels.aggregate(pipeline))
@@ -697,7 +589,11 @@ def get_parcel_geofeed(
             features.append({"type": "Feature", "geometry": geometry, "properties": props})
         return {"type": "FeatureCollection", "features": features}
 
-    cache_params = {"zone_id": zone_id, "parcel_status": parcel_status, "dispute_state": dispute_state, "near_lng": near_lng, "near_lat": near_lat, "max_distance_m": max_distance_m}
+    cache_params = {
+        "zone_id": zone_id, "parcel_status": parcel_status,
+        "dispute_state": dispute_state, "near_lng": near_lng,
+        "near_lat": near_lat, "max_distance_m": max_distance_m,
+    }
     return _cached_json("parcel_geo_feed", _builder, force_refresh=force_refresh, **cache_params)
 
 
@@ -705,15 +601,6 @@ def get_parcel_geofeed(
 @router.get("/pending-heatmap")
 @router.get("/geofeeds/pending-heatmap")
 def get_pending_heatmap(force_refresh: bool = Query(False)):
-    """
-    Return pending/active applications as a GeoJSON FeatureCollection of Points.
-    Used by: LiveMap.jsx clustered marker layer.
-
-    Joins applications to parcels to get the parcel centroid.
-    Each feature is a Point at the parcel's first coordinate.
-
-    Properties: zone_id, status, application_type
-    """
     active_statuses = ["submitted", "pre_checked", "survey_required", "surveyed",
                        "legal_review", "under_objection", "missing_documents", "on_hold"]
 
@@ -731,8 +618,7 @@ def get_pending_heatmap(force_refresh: bool = Query(False)):
             }},
             {"$unwind": {"path": "$parcel", "preserveNullAndEmptyArrays": True}},
             {"$project": {
-                "status": 1,
-                "application_type": 1,
+                "status": 1, "application_type": 1,
                 "zone_id": "$parcel_ref.zone_id",
                 "geometry": "$parcel.geometry",
                 "parcel_code": "$parcel.parcel_code",
@@ -745,16 +631,19 @@ def get_pending_heatmap(force_refresh: bool = Query(False)):
             coords = None
             try:
                 coords = parcel_geometry["coordinates"][0][0]
-            except Exception:
+            except (KeyError, IndexError, TypeError):
+                pass
+            if not coords or len(coords) < 2:
                 continue
+            lng, lat = coords[0], coords[1]
             features.append({
                 "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": coords},
+                "geometry": {"type": "Point", "coordinates": [lng, lat]},
                 "properties": {
-                    "zone_id": app.get("zone_id"),
-                    "status": app.get("status"),
+                    "zone_id":          app.get("zone_id"),
+                    "status":           app.get("status"),
                     "application_type": app.get("application_type"),
-                    "parcel_code": app.get("parcel_code"),
+                    "parcel_code":      app.get("parcel_code"),
                 },
             })
         return {"type": "FeatureCollection", "features": features}

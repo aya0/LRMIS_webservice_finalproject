@@ -19,7 +19,7 @@ def _log_comment_submitted(application_id: str, applicant_id: str, comment_id: s
                 "event_stream": {
                     "type": "comment_submitted",
                     "by": {"actor_type": "applicant", "actor_id": applicant_id},
-                    "at": datetime.utcnow(),
+                    "at": datetime.now(timezone.utc),
                     "meta": {
                         "comment_id": comment_id,
                         "comment_preview": comment[:80],
@@ -45,7 +45,7 @@ def add_applicant_comment(body: ApplicantCommentCreate, application_id: str = Pa
 
     doc = body.model_dump()
     doc["application_id"] = application_id
-    doc["created_at"] = datetime.utcnow()
+    doc["created_at"] = datetime.now(timezone.utc)
 
     result = db.applicant_comments.insert_one(doc)
     comment_id = str(result.inserted_id)

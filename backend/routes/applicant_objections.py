@@ -20,7 +20,7 @@ def _set_application_under_objection(application: dict, application_id: str):
         {
             "$set": {
                 "status": "under_objection",
-                "updated_at": datetime.utcnow(),
+                "updated_at": datetime.now(timezone.utc),
             }
         },
     )
@@ -34,7 +34,7 @@ def _log_objection_submitted(application_id: str, applicant_id: str, objection_i
                 "event_stream": {
                     "type": "objection_submitted",
                     "by": {"actor_type": "applicant", "actor_id": applicant_id},
-                    "at": datetime.utcnow(),
+                    "at": datetime.now(timezone.utc),
                     "meta": {
                         "objection_id": objection_id,
                         "status": objection.get("status"),
@@ -61,7 +61,7 @@ def submit_objection(body: ObjectionCreate, application_id: str = Path(..., patt
 
     doc = body.model_dump()
     doc["application_id"] = application_id
-    doc["created_at"] = datetime.utcnow()
+    doc["created_at"] = datetime.now(timezone.utc)
 
     result = db.objections.insert_one(doc)
     objection_id = str(result.inserted_id)

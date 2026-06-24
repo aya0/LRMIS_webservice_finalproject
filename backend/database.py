@@ -17,10 +17,9 @@ applicant_comments    = db["applicant_comments"]
 objections            = db["objections"]
 
 # MODULE 1: Land Administration collections
-land_applications = db["land_applications"]   
-parcels           = db["parcels"] 
-performance_logs = db["performance_logs"]          
-certificates      = db["certificates"]  
+land_applications = db["land_applications"]
+parcels           = db["parcels"]
+certificates      = db["certificates"]
 
 
 def create_indexes():

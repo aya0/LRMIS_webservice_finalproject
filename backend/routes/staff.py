@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Header, Depends
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from bson import ObjectId
 from passlib.context import CryptContext
 from passlib.hash import pbkdf2_sha256
@@ -68,7 +68,7 @@ def create_staff(body: StaffCreate):
     doc = body.model_dump()
     # Hash password before storing — plain text is discarded
     doc["password_hash"] = pwd_context.hash(doc.pop("password"))
-    doc["created_at"] = datetime.utcnow()
+    doc["created_at"] = datetime.now(timezone.utc)
 
     result = db.staff_members.insert_one(doc)
     doc["id"] = str(result.inserted_id)

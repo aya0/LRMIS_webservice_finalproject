@@ -162,7 +162,7 @@ def create_applicant(body: ApplicantCreate):
             detail="national_id or registration_number already exists.",
         )
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     doc = body.model_dump(exclude={"national_id", "registration_number"})
     identity = {}
     if national_id:
@@ -226,7 +226,7 @@ def register_applicant(payload: dict):
         if db.applicants.find_one(dup_query):
             raise HTTPException(status_code=409, detail="Applicant with provided identity already exists")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     doc = {
         "full_name": full_name,
         "national_id": national_id,

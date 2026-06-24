@@ -146,67 +146,69 @@ export default function LiveMap() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-6 py-4 flex flex-wrap items-end gap-6 mb-5">
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Zone</label>
-          <input
-            value={zoneFilter}
-            onChange={e => setZoneFilter(e.target.value)}
-            placeholder="e.g. ZONE-RM-01"
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Application Type</label>
-          <select
-            value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Types</option>
-            <option value="first_registration">First Registration</option>
-            <option value="ownership_transfer">Ownership Transfer</option>
-            <option value="parcel_subdivision">Parcel Subdivision</option>
-            <option value="parcel_merge">Parcel Merge</option>
-            <option value="boundary_correction">Boundary Correction</option>
-            <option value="certificate_request">Certificate Request</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Status</label>
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Statuses</option>
-            <option value="submitted">Submitted</option>
-            <option value="pre_checked">Pre Checked</option>
-            <option value="survey_required">Survey Required</option>
-            <option value="surveyed">Surveyed</option>
-            <option value="legal_review">Legal Review</option>
-            <option value="approved">Approved</option>
-            <option value="certificate_issued">Certificate Issued</option>
-            <option value="closed">Closed</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Dispute State</label>
-          <select
-            value={disputeFilter}
-            onChange={e => setDisputeFilter(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Disputes</option>
-            <option value="none">None</option>
-            <option value="open">Open</option>
-            <option value="pending">Pending</option>
-            <option value="resolved">Resolved</option>
-          </select>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-6 py-5 mb-5">
+        <div className="flex gap-4 w-full">
+          <div className="flex-1">
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Zone</label>
+            <input
+              value={zoneFilter}
+              onChange={e => setZoneFilter(e.target.value)}
+              placeholder="e.g. ZONE-RM-01"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Application Type</label>
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Types</option>
+              <option value="first_registration">First Registration</option>
+              <option value="ownership_transfer">Ownership Transfer</option>
+              <option value="parcel_subdivision">Parcel Subdivision</option>
+              <option value="parcel_merge">Parcel Merge</option>
+              <option value="boundary_correction">Boundary Correction</option>
+              <option value="certificate_request">Certificate Request</option>
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Status</label>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Statuses</option>
+              <option value="submitted">Submitted</option>
+              <option value="pre_checked">Pre Checked</option>
+              <option value="survey_required">Survey Required</option>
+              <option value="surveyed">Surveyed</option>
+              <option value="legal_review">Legal Review</option>
+              <option value="approved">Approved</option>
+              <option value="certificate_issued">Certificate Issued</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Dispute State</label>
+            <select
+              value={disputeFilter}
+              onChange={e => setDisputeFilter(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Disputes</option>
+              <option value="none">None</option>
+              <option value="open">Open</option>
+              <option value="pending">Pending</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
         </div>
 
         {/* Legend */}
-        <div className="ml-auto flex items-center gap-4">
+        <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-slate-100">
           {LEGEND.map(({ label, color }) => (
             <div key={label} className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full border-2" style={{ backgroundColor: color + '40', borderColor: color }} />

@@ -1,32 +1,31 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { listApplications, transitionApplication, rejectApplication, issueCertificate } from '../api/client';
 import StatusBadge from '../context/StatusBadge';
 
-const ACTION_STATES = ['pre_checked','legal_review','approved','rejected','missing_documents','on_hold','under_objection'];
+const WATCH = ['submitted','pre_checked','survey_required','legal_review','missing_documents','under_objection'];
 
 export default function StaffConsole() {
-  const [items, setItems] = useState([]);
-  const [stats, setStats] = useState({});
-  const [activeFilter, setActiveFilter] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
+  const [searchParams] = useSearchParams();
+  const [allItems, setAllItems]       = useState([]);
+  const [stats, setStats]             = useState({});
+  const [activeFilters, setActiveFilters] = useState(() => {
+    const f = searchParams.get('filter');
+    return f ? new Set([f]) : new Set();
+  });
+  const [loading, setLoading]         = useState(false);
+  const [msg, setMsg]                 = useState('');
+  const [err, setErr]                 = useState('');
 
-  const WATCH = ['submitted','pre_checked','survey_required','legal_review','missing_documents','under_objection'];
-
-  const load = (status = activeFilter) => {
+  const load = () => {
     setLoading(true);
-    const params = { page: 1, page_size: 30, sort_by: 'timestamps.submitted_at', sort_order: -1 };
-    if (status) params.status = status;
-    listApplications(params)
-      .then(r => setItems(r.data.items || []))
+    listApplications({ page: 1, page_size: 100, sort_by: 'timestamps.submitted_at', sort_order: -1 })
+      .then(r => setAllItems(r.data.items || []))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     load();
-    // Load stats
     Promise.all(WATCH.map(s => listApplications({ status: s, page: 1, page_size: 1 })))
       .then(results => {
         const s = {};
@@ -40,10 +39,22 @@ export default function StaffConsole() {
     setTimeout(() => { setErr(''); setMsg(''); }, 4000);
   };
 
+  const toggleFilter = (s) => {
+    setActiveFilters(prev => {
+      const next = new Set(prev);
+      next.has(s) ? next.delete(s) : next.add(s);
+      return next;
+    });
+  };
+
+  const visibleItems = activeFilters.size === 0
+    ? allItems
+    : allItems.filter(app => activeFilters.has(app.status));
+
   const quickTransition = async (appId, targetState) => {
     try {
       await transitionApplication(appId, { target_state: targetState, actor_id: 'registrar_console', actor_type: 'registrar' });
-      flash(`✅ ${appId} → ${targetState}`); load();
+      flash(`${appId} moved to ${targetState}.`); load();
     } catch (e) { flash(e.response?.data?.detail || 'Transition failed.', true); }
   };
 
@@ -59,11 +70,13 @@ export default function StaffConsole() {
   const quickCertificate = async (appId) => {
     try {
       await issueCertificate(appId, 'registrar_console');
-      flash(`✅ Certificate issued for ${appId}`); load();
+      flash(`Certificate issued for ${appId}.`); load();
     } catch (e) { flash(e.response?.data?.detail || 'Certificate failed.', true); }
   };
 
-  const setFilter = (s) => { setActiveFilter(s); load(s); };
+  const filterLabel = activeFilters.size === 0
+    ? '(Active)'
+    : `— ${[...activeFilters].map(s => s.replace(/_/g,' ')).join(', ')}`;
 
   return (
     <>
@@ -74,36 +87,51 @@ export default function StaffConsole() {
             <p className="text-slate-500 text-sm">Review applications, approve transitions, issue certificates, and handle registrar tasks.</p>
           </div>
           <div className="flex gap-2">
-            <a className="btn btn-primary" href="/applications">Open Applications</a>
-            <a className="btn btn-outline" href="/certificates">Open Certificates</a>
-            <a className="btn btn-outline" href="/parcels">Open Parcels</a>
+            <a className="btn btn-primary" href="/applications">Applications</a>
+            <a className="btn btn-outline" href="/certificates">Certificates</a>
+            <a className="btn btn-outline" href="/parcels">Parcels</a>
           </div>
         </div>
 
         <div className="grid grid-cols-6 gap-4 mt-6">
-          {WATCH.map(s => (
-            <button key={s} onClick={() => setFilter(activeFilter === s ? '' : s)} className="col-span-1 bg-white border rounded-xl px-3 py-3 text-left hover:shadow">
-              <div className="text-xs text-slate-400">{s.replace(/_/g,' ')}</div>
-              <div className="text-lg font-semibold">{stats[s] || 0}</div>
-            </button>
-          ))}
+          {WATCH.map(s => {
+            const active = activeFilters.has(s);
+            return (
+              <button
+                key={s}
+                onClick={() => toggleFilter(s)}
+                className={`col-span-1 border rounded-xl px-3 py-3 text-left transition-colors ${
+                  active
+                    ? 'bg-slate-800 border-slate-800 text-white shadow'
+                    : 'bg-white border-slate-200 text-slate-700 hover:shadow'
+                }`}
+              >
+                <div className={`text-xs ${active ? 'text-slate-300' : 'text-slate-400'}`}>{s.replace(/_/g,' ')}</div>
+                <div className="text-lg font-semibold">{stats[s] ?? 0}</div>
+              </button>
+            );
+          })}
         </div>
+
+        {activeFilters.size > 0 && (
+          <div className="flex items-center gap-3 mt-3">
+            <span className="text-sm text-slate-500">
+              Filtering by: {[...activeFilters].map(s => (
+                <span key={s} className="inline-block bg-slate-100 text-slate-700 rounded px-2 py-0.5 text-xs mr-1">{s.replace(/_/g,' ')}</span>
+              ))}
+            </span>
+            <button className="btn btn-outline btn-sm" onClick={() => setActiveFilters(new Set())}>Clear</button>
+          </div>
+        )}
       </section>
 
       {msg && <div className="alert alert-success">{msg}</div>}
       {err && <div className="alert alert-error">{err}</div>}
 
-      {activeFilter && (
-        <div className="flex items-center gap-4 mb-6">
-          <span>Filtering: <StatusBadge status={activeFilter} /></span>
-          <button className="btn btn-outline btn-sm" onClick={() => setFilter('')}>Clear filter</button>
-        </div>
-      )}
-
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
-          <div className="text-lg font-semibold">Applications {activeFilter ? `— ${activeFilter}` : '(Active)'}</div>
-          <button className="btn btn-outline btn-sm" onClick={() => load()}>↻ Refresh</button>
+          <div className="text-lg font-semibold">Applications {filterLabel}</div>
+          <button className="btn btn-outline btn-sm" onClick={load}>Refresh</button>
         </div>
 
         {loading ? <div className="loading">Loading…</div> : (
@@ -121,9 +149,9 @@ export default function StaffConsole() {
                 </tr>
               </thead>
               <tbody>
-                {items.length === 0
+                {visibleItems.length === 0
                   ? <tr><td colSpan={7} className="empty">No applications in this category.</td></tr>
-                  : items.map(app => (
+                  : visibleItems.map(app => (
                     <tr key={app.id}>
                       <td><Link to={`/applications/${app.application_id}`} className="text-blue-600 font-semibold">{app.application_id}</Link></td>
                       <td className="text-sm">{app.application_type?.replace(/_/g,' ')}</td>
@@ -132,25 +160,19 @@ export default function StaffConsole() {
                       <td><StatusBadge status={app.status} /></td>
                       <td className="text-sm">{app.timestamps?.submitted_at ? new Date(app.timestamps.submitted_at).toLocaleDateString() : '-'}</td>
                       <td>
-                        <div className="flex gap-2">
-                          {app.status === 'submitted' && (
-                            <button className="btn btn-primary btn-sm" onClick={() => quickTransition(app.application_id, 'pre_checked')}>Pre-check ✓</button>
-                          )}
-                          {app.status === 'pre_checked' && (
-                            <button className="btn btn-primary btn-sm" onClick={() => quickTransition(app.application_id, 'survey_required')}>→ Survey</button>
-                          )}
-                          {app.status === 'surveyed' && (
-                            <button className="btn btn-primary btn-sm" onClick={() => quickTransition(app.application_id, 'legal_review')}>→ Legal</button>
-                          )}
-                          {app.status === 'legal_review' && (
-                            <button className="btn btn-success btn-sm" onClick={() => quickTransition(app.application_id, 'approved')}>Approve ✓</button>
-                          )}
-                          {app.status === 'approved' && (
-                            <button className="btn btn-success btn-sm" onClick={() => quickCertificate(app.application_id)}>📜 Certify</button>
-                          )}
-                          {!['rejected','closed','certificate_issued'].includes(app.status) && (
-                            <button className="btn btn-danger btn-sm" onClick={() => quickReject(app.application_id)}>✖</button>
-                          )}
+                        <div style={{ display: 'grid', gridTemplateColumns: '96px 64px 56px', gap: '6px', alignItems: 'center' }}>
+                          {/* Col 1: primary action */}
+                          {app.status === 'submitted'    ? <button className="btn btn-primary btn-sm" onClick={() => quickTransition(app.application_id, 'pre_checked')}>Pre-check</button>
+                          : app.status === 'pre_checked' ? <button className="btn btn-primary btn-sm" onClick={() => quickTransition(app.application_id, 'survey_required')}>Survey</button>
+                          : app.status === 'surveyed'    ? <button className="btn btn-primary btn-sm" onClick={() => quickTransition(app.application_id, 'legal_review')}>Legal</button>
+                          : app.status === 'legal_review'? <button className="btn btn-success btn-sm" onClick={() => quickTransition(app.application_id, 'approved')}>Approve</button>
+                          : app.status === 'approved'    ? <button className="btn btn-success btn-sm" onClick={() => quickCertificate(app.application_id)}>Certify</button>
+                          : <span />}
+                          {/* Col 2: reject */}
+                          {!['rejected','closed','certificate_issued'].includes(app.status)
+                            ? <button className="btn btn-danger btn-sm" onClick={() => quickReject(app.application_id)}>Reject</button>
+                            : <span />}
+                          {/* Col 3: view */}
                           <Link to={`/applications/${app.application_id}`} className="btn btn-outline btn-sm">View</Link>
                         </div>
                       </td>

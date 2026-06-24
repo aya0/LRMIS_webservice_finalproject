@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Any, Dict
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class SurveyMilestoneType(str, Enum):
@@ -37,7 +37,7 @@ class Milestone(BaseModel):
 class FieldNote(BaseModel):
     note:       str
     added_by:   str
-    added_at:   datetime = Field(default_factory=datetime.utcnow)
+    added_at:   datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Request: add a milestone ──────────────────────────────────────────────────

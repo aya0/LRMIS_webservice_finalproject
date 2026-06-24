@@ -19,7 +19,7 @@ def _log_document_uploaded(application_id: str, applicant_id: str, document_id: 
                 "event_stream": {
                     "type": "document_uploaded",
                     "by": {"actor_type": "applicant", "actor_id": applicant_id},
-                    "at": datetime.utcnow(),
+                    "at": datetime.now(timezone.utc),
                     "meta": {
                         "document_id": document_id,
                         "document_type": document.get("document_type"),
@@ -47,7 +47,7 @@ def add_application_document(body: ApplicationDocumentCreate, application_id: st
 
     doc = body.model_dump()
     doc["application_id"] = application_id
-    doc["uploaded_at"] = datetime.utcnow()
+    doc["uploaded_at"] = datetime.now(timezone.utc)
 
     result = db.application_documents.insert_one(doc)
     document_id = str(result.inserted_id)
