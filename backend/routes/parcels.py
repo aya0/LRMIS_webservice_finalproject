@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import datetime, timezone
 from bson import ObjectId
 
-from database import parcels
+from database import land_applications, parcels, staff_members
 from models.schemas import ParcelCreate, ParcelUpdate
 
 router = APIRouter(prefix="/parcels", tags=["Parcels"])
@@ -27,6 +27,19 @@ def serialize(doc):
         else:
             out[k] = v
     return out
+
+
+FALLBACK_ZONE_IDS = ["ZONE-RM-01", "ZONE-RM-02", "ZONE-RM-03", "ZONE-RM-04", "ZONE-NB-01"]
+
+
+def _clean_zone_ids(values):
+    zone_ids = set()
+    for value in values:
+        if isinstance(value, list):
+            zone_ids.update(item.strip() for item in value if isinstance(item, str) and item.strip())
+        elif isinstance(value, str) and value.strip():
+            zone_ids.add(value.strip())
+    return zone_ids
 
 
 @router.post("/", status_code=201)
@@ -97,6 +110,20 @@ def delete_parcel(parcel_id: str):
 
     parcels.delete_one({"_id": doc["_id"]})
     return {"message": "Parcel deleted successfully.", "parcel_id": str(doc["_id"])}
+
+
+@router.get("/zones")
+def list_zones():
+    """Return distinct zone IDs already present in shared MongoDB collections."""
+    zone_ids = set()
+    zone_ids.update(_clean_zone_ids(parcels.distinct("zone_id")))
+    zone_ids.update(_clean_zone_ids(land_applications.distinct("parcel_ref.zone_id")))
+    zone_ids.update(_clean_zone_ids(staff_members.distinct("coverage.zone_ids")))
+
+    if not zone_ids:
+        zone_ids.update(FALLBACK_ZONE_IDS)
+
+    return [{"zone_id": zone_id, "label": zone_id} for zone_id in sorted(zone_ids)]
 
 
 @router.get("/{parcel_id}")

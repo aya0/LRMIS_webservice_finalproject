@@ -19,7 +19,7 @@ export function saveApplicantId(applicantId) {
 
 export function friendlyApplicantError(err, fallback) {
   if (!err.response) {
-    return 'Could not connect to the server. Please make sure the backend is running.'
+    return 'We could not load this information right now. Please try again after checking that the service is running.'
   }
   if (err.response.status === 404) {
     return 'Applicant not found. Please check the Applicant ID.'
@@ -27,7 +27,15 @@ export function friendlyApplicantError(err, fallback) {
   const detail = err.response?.data?.detail
   if (typeof detail === 'string') return detail
   if (Array.isArray(detail)) {
-    return detail.map(item => item.msg || item.message).filter(Boolean).join(' ')
+    return detail.map(item => {
+      let msg = item.msg || item.message
+      if (msg === 'Field required') msg = 'is required'
+      if (item.loc && item.loc.length > 0) {
+        const fieldPath = item.loc.filter(l => l !== 'body').join('.')
+        return fieldPath ? `${fieldPath} ${msg}` : msg
+      }
+      return msg
+    }).filter(Boolean).join(' | ')
   }
   return fallback
 }
