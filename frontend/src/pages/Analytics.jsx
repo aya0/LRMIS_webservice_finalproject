@@ -14,7 +14,7 @@ import {
   getKPIs, getApplicationsByStatus, getApplicationsByType, getApplicationsByZone,
   getProcessingTime, getSurveyorAnalytics, getRegistrarAnalytics, getCertificatesPerMonth,
   getObjectionStats, getDelayedApplications, getHotspotZones,
-  downloadManagementReport
+  downloadManagementReport, getApplicationsOverTime, getProcessingTimeBuckets
 } from '../api/api'
 
 function KPICard({ label, value, icon, accent = '#2563eb', onClick }) {
@@ -89,6 +89,8 @@ export default function Analytics() {
   const [objStats,   setObjStats]   = useState([])
   const [delayed,    setDelayed]    = useState({ count: 0, items: [] })
   const [hotspots,   setHotspots]   = useState([])
+  const [appsOverTime, setAppsOverTime] = useState([])
+  const [procBuckets,  setProcBuckets]  = useState([])
   const [loading,    setLoading]    = useState(true)
   const [dlErr,      setDlErr]      = useState('')
 
@@ -130,7 +132,9 @@ export default function Analytics() {
       getObjectionStats().catch(() => ({ data: [] })),
       getDelayedApplications().catch(() => ({ data: { count: 0, items: [] } })),
       getHotspotZones().catch(() => ({ data: [] })),
-    ]).then(([k, s, t, z, p, sv, rg, cm, ob, dl, hs]) => {
+      getApplicationsOverTime(),
+      getProcessingTimeBuckets(),
+    ]).then(([k, s, t, z, p, sv, rg, cm, ob, dl, hs, aot, pb]) => {
       setKpis(k.data ?? {})
       setByStatus(Array.isArray(s.data) ? s.data : [])
       setByType(Array.isArray(t.data) ? t.data : [])
@@ -142,6 +146,8 @@ export default function Analytics() {
       setObjStats(Array.isArray(ob.data) ? ob.data : [])
       setDelayed(dl.data ?? { count: 0, items: [] })
       setHotspots(Array.isArray(hs.data) ? hs.data : [])
+      setAppsOverTime(Array.isArray(aot.data) ? aot.data : [])
+      setProcBuckets(Array.isArray(pb.data) ? pb.data : [])
     }).finally(() => setLoading(false))
   }, [])
 
@@ -233,9 +239,35 @@ export default function Analytics() {
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
-        ) : (
-          <PlaceholderChart title="Applications over Time / by Status" subtitle="Group module endpoint required" />
-        )}
+        ) : null}
+
+        {appsOverTime.length > 0 ? (
+          <ChartCard title="Applications over Time" subtitle="Monthly submissions trend">
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={appsOverTime}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                <Line type="monotone" dataKey="count" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        ) : null}
+
+        {procBuckets.length > 0 ? (
+          <ChartCard title="Processing Time Distribution" subtitle="Auto-bucketed ranges (days to approval)">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={procBuckets} barSize={32}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="range" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                <Bar dataKey="count" fill="#8b5cf6" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        ) : null}
 
         {byType.length > 0 ? (
           <ChartCard title="Applications by Type" subtitle="Current distribution across application categories">

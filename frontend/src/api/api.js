@@ -75,5 +75,7 @@ export const downloadManagementReport = async (format = 'csv') => {
 }
 
 export default api
-export const getCertificatesPerMonth = () => api.get('/analytics/certs-per-month')
-export const getObjectionStats       = () => api.get('/analytics/objections')
+export const getCertificatesPerMonth    = () => api.get('/analytics/certs-per-month').catch(() => ({ data: [] }))
+export const getObjectionStats          = () => api.get('/analytics/objections').catch(() => ({ data: [] }))
+export const getApplicationsOverTime    = () => api.get('/analytics/applications-over-time').catch(() => ({ data: [] }))
+export const getProcessingTimeBuckets   = () => api.get('/analytics/processing-time-buckets').catch(() => ({ data: [] }))
