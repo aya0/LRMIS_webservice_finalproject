@@ -487,6 +487,76 @@ def get_objection_stats(force_refresh: bool = Query(False)):
     return _cached_json("objection_stats", lambda: list(db.land_applications.aggregate(pipeline)), force_refresh=force_refresh)
 
 
+# ── GET /analytics/processing-time-buckets ───────────────────────────────────
+@router.get("/processing-time-buckets")
+def get_processing_time_buckets(force_refresh: bool = Query(False), buckets: int = Query(5, ge=2, le=10)):
+    """
+    Uses $bucketAuto to group approved applications into N auto-sized
+    processing-time buckets (days from submitted to approved).
+    """
+    pipeline = [
+        {"$match": {"status": "approved",
+                    "timestamps.approved_at":  {"$ne": None},
+                    "timestamps.submitted_at": {"$ne": None}}},
+        {"$project": {"days": {"$divide": [
+            {"$subtract": ["$timestamps.approved_at", "$timestamps.submitted_at"]},
+            86400000
+        ]}}},
+        {"$bucketAuto": {
+            "groupBy": "$days",
+            "buckets": buckets,
+            "output":  {"count": {"$sum": 1}, "avg_days": {"$avg": "$days"}}
+        }},
+        {"$project": {
+            "_id": 0,
+            "range": {"$concat": [
+                {"$toString": {"$round": ["$_id.min", 0]}}, "–",
+                {"$toString": {"$round": ["$_id.max", 0]}}, "d"
+            ]},
+            "count":    1,
+            "avg_days": {"$round": ["$avg_days", 1]}
+        }},
+    ]
+    return _cached_json(
+        "processing_time_buckets",
+        lambda: list(db.land_applications.aggregate(pipeline)),
+        force_refresh=force_refresh,
+        buckets=buckets,
+    )
+
+
+# ── GET /analytics/applications-over-time ────────────────────────────────────
+@router.get("/applications-over-time")
+def get_applications_over_time(force_refresh: bool = Query(False)):
+    """Monthly count of submitted applications — powers the 'Applications over Time' chart."""
+    pipeline = [
+        {"$match": {"timestamps.submitted_at": {"$ne": None}}},
+        {"$group": {
+            "_id": {
+                "year":  {"$year":  "$timestamps.submitted_at"},
+                "month": {"$month": "$timestamps.submitted_at"},
+            },
+            "count": {"$sum": 1},
+        }},
+        {"$project": {
+            "_id": 0,
+            "month": {"$concat": [
+                {"$toString": "$_id.year"}, "-",
+                {"$cond": [{"$lt": ["$_id.month", 10]},
+                           {"$concat": ["0", {"$toString": "$_id.month"}]},
+                           {"$toString": "$_id.month"}]}
+            ]},
+            "count": 1,
+        }},
+        {"$sort": {"month": 1}},
+    ]
+    return _cached_json(
+        "applications_over_time",
+        lambda: list(db.land_applications.aggregate(pipeline)),
+        force_refresh=force_refresh,
+    )
+
+
 # ── GET /analytics/hotspot-zones ─────────────────────────────────────────────
 @router.get("/hotspot-zones")
 def get_hotspot_zones(force_refresh: bool = Query(False), limit: int = Query(10, ge=1, le=25)):
