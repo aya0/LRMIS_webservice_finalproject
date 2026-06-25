@@ -240,7 +240,8 @@ def seed():
     for index in range(1, 101):
         applicant_id = object_id_for("10", index)
         parcel_id = object_id_for("20", index)
-        application_id = object_id_for("30", index)
+        application_id_oid = object_id_for("30", index)
+        application_id = f"LRMIS-2026-{index:04d}"
         survey_task_id = object_id_for("40", index)
         performance_id = object_id_for("50", index)
         certificate_id = object_id_for("60", index)
@@ -334,8 +335,8 @@ def seed():
         }
 
         land_applications.insert_one({
-            "_id": application_id,
-            "application_id": f"LRMIS-2026-{index:04d}",
+            "_id": application_id_oid,
+            "application_id": application_id,
             "application_type": application_type,
             "status": status,
             "priority": priority,
