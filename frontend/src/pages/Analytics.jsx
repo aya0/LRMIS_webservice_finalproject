@@ -213,14 +213,14 @@ export default function Analytics() {
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
-                  label={({ status, percent }) => `${status?.replace(/_/g,' ')} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => name && percent > 0.04 ? `${String(name).replace(/_/g,' ')} ${(percent * 100).toFixed(0)}%` : ''}
                   labelLine={false}
                 >
                   {byStatus.map((_, i) => (
                     <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(val, name) => [val, name?.replace(/_/g,' ')]} contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                <Tooltip formatter={(val, name) => [val, String(name ?? '').replace(/_/g,' ')]} contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0' }} />
               </PieChart>
             </ResponsiveContainer>
           </ChartCard>
