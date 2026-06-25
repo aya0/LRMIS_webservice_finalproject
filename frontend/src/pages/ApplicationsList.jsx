@@ -24,6 +24,10 @@ export default function ApplicationsList() {
     if (filters.application_type) params.application_type = filters.application_type;
     if (filters.zone_id) params.zone_id = filters.zone_id;
     if (filters.priority) params.priority = filters.priority;
+    if (staff?.id) {
+      params.assigned_staff_id = staff.id;
+      params.assigned_staff_role = staff.role;
+    }
     listApplications(params).then(res => {
       setItems(res.data.items || []);
       setTotal(res.data.total);

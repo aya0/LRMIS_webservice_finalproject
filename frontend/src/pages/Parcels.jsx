@@ -22,6 +22,10 @@ export default function Parcels() {
   const load = () => {
     setLoading(true);
     const params = { page: 1, page_size: 50 };
+    if (staff?.id) {
+      params.assigned_staff_id = staff.id;
+      params.assigned_staff_role = staff.role;
+    }
     listParcels(params)
       .then(r => { setParcels(r.data.items || []); setTotal(r.data.total); })
       .finally(() => setLoading(false));

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Path
 
@@ -8,6 +8,14 @@ from routes.module2_helpers import find_applicant_by_id, serialize_doc_id, valid
 from routes.module2_validation import Module2ValidationRoute
 
 router = APIRouter(route_class=Module2ValidationRoute)
+
+
+ALREADY_UNDER_OBJECTION_DETAIL = "This application is already under objection. You can track it from the Timeline page."
+
+
+def _validate_objection_status(application: dict):
+    if application and application.get("status") == "under_objection":
+        raise HTTPException(status_code=400, detail=ALREADY_UNDER_OBJECTION_DETAIL)
 
 
 # MODULE 2: Applicant objection endpoints
@@ -58,6 +66,7 @@ def submit_objection(body: ObjectionCreate, application_id: str = Path(..., patt
     if not applicant:
         raise HTTPException(status_code=404, detail="Applicant not found.")
     application = validate_application_access(application_id, body.applicant_id, applicant, "Submit objection")
+    _validate_objection_status(application)
 
     doc = body.model_dump()
     doc["application_id"] = application_id
