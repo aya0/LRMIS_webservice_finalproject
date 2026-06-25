@@ -29,6 +29,9 @@ export const issueCertificate = (id, issuedBy = 'registrar') =>
 export const addNote = (id, body) =>
   api.post(`/applications/${id}/notes`, body);
 
+export const updateApplication = (id, body) =>
+  api.patch(`/applications/${id}`, body);
+
 // ── Parcels ────────────────────────────────────────────────────────────────────
 export const createParcel = (data) => api.post('/parcels/', data);
 export const listParcels = (params) => api.get('/parcels/', { params });

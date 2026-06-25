@@ -386,7 +386,22 @@ def list_surveyor_tasks(surveyor_id: str, status: Optional[str] = None):
         query["status"] = status
 
     tasks = list(db.survey_tasks.find(query))
-    return [_serialize(t) for t in tasks]
+
+    # Enrich each task with parcel_number, zone_id, and priority from the application
+    result = []
+    for task in tasks:
+        serialized = _serialize(task)
+        app_id = task.get("application_id")
+        if app_id:
+            application = db.land_applications.find_one({"application_id": app_id})
+            if application:
+                parcel_ref = application.get("parcel_ref", {})
+                serialized["parcel_number"] = parcel_ref.get("parcel_number")
+                serialized["zone_id"] = parcel_ref.get("zone_id")
+                serialized["priority"] = application.get("priority")
+        result.append(serialized)
+
+    return result
 
 
 # ── PATCH /applications/{application_id}/reassign-surveyor ───────────────────

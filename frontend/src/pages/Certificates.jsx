@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { getCertificate, getApplicationCertificate, verifyCertificate } from '../api/client';
+import { useState, useEffect } from 'react';
+import { getCertificate, getApplicationCertificate, verifyCertificate, listApplications, issueCertificate } from '../api/client';
 
 export default function Certificates() {
   const [certId, setCertId] = useState('');
@@ -7,6 +7,34 @@ export default function Certificates() {
   const [verify, setVerify] = useState(null);
   const [err, setErr] = useState('');
   const [notice, setNotice] = useState('');
+
+  // Approved applications awaiting certificate issuance
+  const [approvedApps, setApprovedApps] = useState([]);
+  const [issuing, setIssuing] = useState('');
+  const [issueMsg, setIssueMsg] = useState('');
+
+  const loadApproved = () => {
+    listApplications({ status: 'approved', page: 1, page_size: 50 })
+      .then(r => setApprovedApps(r.data.items || []))
+      .catch(() => {});
+  };
+
+  useEffect(() => { loadApproved(); }, []);
+
+  const handleIssueCertificate = async (appId) => {
+    setIssuing(appId);
+    setIssueMsg('');
+    try {
+      await issueCertificate(appId, 'registrar_console');
+      setIssueMsg(`Certificate issued for ${appId}.`);
+      loadApproved();
+      setTimeout(() => setIssueMsg(''), 4000);
+    } catch (e) {
+      setIssueMsg(e.response?.data?.detail || 'Failed to issue certificate.');
+    } finally {
+      setIssuing('');
+    }
+  };
 
   const handleLookup = async () => {
     setErr('');
@@ -76,6 +104,67 @@ export default function Certificates() {
           <a className="btn btn-outline" href="/parcels">Open Parcels</a>
         </div>
       </section>
+
+      {/* Approved applications ready for certificate issuance */}
+      <div className="module1-card" style={{ marginBottom: 24 }}>
+        <div className="card-title" style={{ marginBottom: 16 }}>
+          📋 Approved Applications — Ready for Certificate Issuance
+          <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 10 }}>
+            ({approvedApps.length} pending)
+          </span>
+        </div>
+
+        {issueMsg && (
+          <div className={`alert ${issueMsg.includes('Failed') ? 'alert-error' : 'alert-success'}`} style={{ marginBottom: 12 }}>
+            {issueMsg}
+          </div>
+        )}
+
+        {approvedApps.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No approved applications awaiting certificate issuance.</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="module1-table">
+              <thead>
+                <tr>
+                  <th>Application ID</th>
+                  <th>Type</th>
+                  <th>Zone</th>
+                  <th>Priority</th>
+                  <th>Approved At</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {approvedApps.map(app => (
+                  <tr key={app.id}>
+                    <td><strong>{app.application_id}</strong></td>
+                    <td>{app.application_type?.replace(/_/g, ' ')}</td>
+                    <td>{app.parcel_ref?.zone_id || '—'}</td>
+                    <td>
+                      <span style={{ fontWeight: 600, color: app.priority === 'urgent' ? '#dc2626' : app.priority === 'high' ? '#d97706' : 'inherit' }}>
+                        {app.priority}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '0.85rem' }}>
+                      {app.timestamps?.approved_at ? new Date(app.timestamps.approved_at).toLocaleDateString() : '—'}
+                    </td>
+                    <td>
+                      <button
+                        className="btn btn-success btn-sm"
+                        disabled={issuing === app.application_id}
+                        onClick={() => handleIssueCertificate(app.application_id)}
+                      >
+                        {issuing === app.application_id ? 'Issuing…' : '📜 Issue Certificate'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className="module1-card module1-card-accent" style={{ maxWidth: 560 }}>
         <div className="card-title">Search Certificate</div>

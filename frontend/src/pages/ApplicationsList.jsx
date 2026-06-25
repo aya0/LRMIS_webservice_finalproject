@@ -24,11 +24,6 @@ export default function ApplicationsList() {
     if (filters.application_type) params.application_type = filters.application_type;
     if (filters.zone_id) params.zone_id = filters.zone_id;
     if (filters.priority) params.priority = filters.priority;
-    if (staff?.id) {
-      params.assigned_staff_id = staff.id;
-      params.assigned_staff_role = staff.role;
-    }
-
     listApplications(params).then(res => {
       setItems(res.data.items || []);
       setTotal(res.data.total);
@@ -64,8 +59,8 @@ export default function ApplicationsList() {
             <div className="module1-stat-value">{items.length}</div>
           </div>
           <div className="module1-stat">
-            <div className="module1-stat-label">Entry Point</div>
-            <div className="module1-stat-value">CRUD</div>
+            <div className="module1-stat-label">Pages</div>
+            <div className="module1-stat-value">{pages}</div>
           </div>
         </div>
 

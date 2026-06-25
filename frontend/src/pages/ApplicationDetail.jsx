@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getApplication, transitionApplication, holdApplication,
-         rejectApplication, issueCertificate, addNote } from '../api/client';
+         rejectApplication, issueCertificate, addNote, updateApplication } from '../api/client';
 import StatusBadge from '../context/StatusBadge';
 
 export default function ApplicationDetail() {
@@ -75,6 +75,28 @@ export default function ApplicationDetail() {
       await addNote(id, { note: noteText, actor_id: actorId });
       flash('Note added.'); setShowNote(false); setNoteText(''); load();
     } catch (e) { flash('Failed to add note.', true); }
+  };
+
+  const verifyDocument = async (docType, newStatus) => {
+    const updatedDocs = (app.required_documents || []).map(d =>
+      d.document_type === docType ? { ...d, status: newStatus } : d
+    );
+    try {
+      await updateApplication(id, { required_documents: updatedDocs });
+      flash(`Document "${docType.replace(/_/g,' ')}" marked as ${newStatus}.`);
+      load();
+    } catch (e) { flash(e.response?.data?.detail || 'Document update failed.', true); }
+  };
+
+  const [regDecision, setRegDecision] = useState('');
+  const [showRegDecision, setShowRegDecision] = useState(false);
+
+  const submitRegistrarDecision = async () => {
+    if (!regDecision) return;
+    try {
+      await addNote(id, { note: `[REGISTRAR DECISION] ${regDecision}`, actor_id: actorId });
+      flash('Registrar decision recorded.'); setShowRegDecision(false); setRegDecision(''); load();
+    } catch (e) { flash('Failed to record decision.', true); }
   };
 
   if (loading) return <div className="loading">Loading…</div>;
@@ -185,6 +207,67 @@ export default function ApplicationDetail() {
                 </div>
               ))
             }
+          </div>
+
+          {/* Registrar Review */}
+          <div className="module1-card" style={{ borderLeft: '4px solid #0f766e' }}>
+            <div className="card-title">⚖️ Registrar Review</div>
+            <p style={{ fontSize: '0.83rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+              Accept or reject each document, then record your registrar decision.
+            </p>
+            {(app.required_documents || []).length === 0 ? (
+              <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>No documents to review.</p>
+            ) : (
+              <div>
+                {(app.required_documents || []).map((d, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>{d.document_type?.replace(/_/g, ' ')}</span>
+                      <span style={{
+                        marginLeft: 8, fontSize: '0.75rem', fontWeight: 600, padding: '2px 8px', borderRadius: 99,
+                        background: d.status === 'verified' ? '#d1fae5' : d.status === 'rejected' ? '#fee2e2' : '#fef9c3',
+                        color: d.status === 'verified' ? '#065f46' : d.status === 'rejected' ? '#991b1b' : '#92400e'
+                      }}>
+                        {d.status}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-success btn-sm"
+                        disabled={d.status === 'verified'}
+                        onClick={() => verifyDocument(d.document_type, 'verified')}>
+                        ✓ Verify
+                      </button>
+                      <button className="btn btn-danger btn-sm"
+                        disabled={d.status === 'rejected'}
+                        onClick={() => verifyDocument(d.document_type, 'rejected')}>
+                        ✗ Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: 14 }}>
+              {!showRegDecision ? (
+                <button className="btn btn-primary btn-sm" onClick={() => setShowRegDecision(true)}>
+                  📝 Add Registrar Decision
+                </button>
+              ) : (
+                <div>
+                  <textarea
+                    value={regDecision}
+                    onChange={e => setRegDecision(e.target.value)}
+                    placeholder="Registrar decision: approve legal review, request additional documents, etc."
+                    rows={3}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.88rem', marginBottom: 8 }}
+                  />
+                  <div className="flex-gap">
+                    <button className="btn btn-primary btn-sm" onClick={submitRegistrarDecision}>Submit Decision</button>
+                    <button className="btn btn-outline btn-sm" onClick={() => setShowRegDecision(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Assignment */}
