@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { addDocument } from '../../services/applicantApi'
 import {
   ApplicantApplicationSelect,
@@ -187,7 +188,7 @@ export default function UploadDocument() {
       file_url: form.file_url.trim(),
       file_size: form.file_size ? Number(form.file_size) : null,
       file_extension: form.file_extension.trim() || null,
-      status: 'uploaded',
+      status: 'submitted',
     }
     try {
       const res = await addDocument(form.application_id, payload)

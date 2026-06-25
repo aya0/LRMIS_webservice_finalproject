@@ -10,6 +10,8 @@ import { friendlyApplicantError } from './applicantUx'
 import './applicantPortal.css'
 
 function errorMessage(err) {
+  const detail = err.response?.data?.detail
+  if (typeof detail === 'string') return detail
   return friendlyApplicantError(err, 'Unable to submit comment. Check the selected application and comment text.')
 }
 

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { submitObjection } from '../../services/applicantApi'
 import {
   ApplicantApplicationSelect,
+  getApplicationId,
   useApplicantApplications,
 } from './ApplicantApplicationSelect'
 import ApplicantLayout from './ApplicantLayout'
@@ -10,6 +11,8 @@ import { friendlyApplicantError } from './applicantUx'
 import './applicantPortal.css'
 
 function errorMessage(err) {
+  const detail = err.response?.data?.detail
+  if (typeof detail === 'string') return detail
   return friendlyApplicantError(err, 'Unable to submit objection. Check the selected application and objection details.')
 }
 
@@ -67,6 +70,9 @@ export default function SubmitObjection() {
       const err = validateField(field, field === 'applicant' ? applicantId : form[field])
       if (err) newErrors[field] = err
     })
+    if (isAlreadyUnderObjection) {
+      newErrors.application_id = 'This application is already under objection. You can track it from the Timeline page.'
+    }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -98,12 +104,16 @@ export default function SubmitObjection() {
     }
   }
 
+  const selectedApplication = applications.find(app => getApplicationId(app) === form.application_id)
+  const isAlreadyUnderObjection = selectedApplication?.status === 'under_objection'
+  const alreadyUnderObjectionMessage = 'This application is already under objection. You can track it from the Timeline page.'
   const canSubmit = Boolean(
     applicantId &&
     form.application_id &&
     form.reason_category.trim() &&
     form.reason.trim().length >= 10 &&
-    applications.length > 0
+    applications.length > 0 &&
+    !isAlreadyUnderObjection
   )
 
   return (
@@ -164,6 +174,13 @@ export default function SubmitObjection() {
             loading={loadingApplications}
             label="Linked Application"
           />
+
+          {isAlreadyUnderObjection && (
+            <section className="applicant-error" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <span>{alreadyUnderObjectionMessage}</span>
+              <Link to="/applicant/timeline" className="applicant-button" style={{ textDecoration: 'none' }}>View Timeline</Link>
+            </section>
+          )}
 
           <label className="applicant-field applicant-field-full" style={{ marginBottom: 0 }}>
             <span>Objection Reason Category<span style={{ color: '#dc2626', marginLeft: '4px' }}>*</span></span>
