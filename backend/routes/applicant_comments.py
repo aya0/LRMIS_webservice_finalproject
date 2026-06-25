@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Path
 
@@ -8,6 +9,34 @@ from routes.module2_helpers import find_applicant_by_id, serialize_doc_id, valid
 from routes.module2_validation import Module2ValidationRoute
 
 router = APIRouter(route_class=Module2ValidationRoute)
+
+
+APPLICANT_COMMENT_ALLOWED_STATUSES = {
+    "submitted",
+    "pre_checked",
+    "survey_required",
+    "surveyed",
+    "legal_review",
+    "approved",
+    "certificate_issued",
+    "closed",
+    "rejected",
+    "on_hold",
+    "missing_documents",
+    "under_objection",
+}
+
+
+def _validate_comment_status(application: Optional[dict]):
+    if not application:
+        return
+    status = application.get("status")
+    if status and status not in APPLICANT_COMMENT_ALLOWED_STATUSES:
+        allowed = ", ".join(sorted(APPLICANT_COMMENT_ALLOWED_STATUSES))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Applicant comments are not allowed for application status '{status}'. Allowed statuses: {allowed}.",
+        )
 
 
 # MODULE 2: Applicant comments and responses
@@ -41,7 +70,8 @@ def add_applicant_comment(body: ApplicantCommentCreate, application_id: str = Pa
     applicant = find_applicant_by_id(body.applicant_id, "Add comment")
     if not applicant:
         raise HTTPException(status_code=404, detail="Applicant not found.")
-    validate_application_access(application_id, body.applicant_id, applicant, "Add comment")
+    application = validate_application_access(application_id, body.applicant_id, applicant, "Add comment")
+    _validate_comment_status(application)
 
     doc = body.model_dump()
     doc["application_id"] = application_id

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 # MODULE 2: Supporting document metadata models
 class DocumentStatus(str, Enum):
+    submitted = "submitted"
     pending_review = "pending_review"
     approved = "approved"
     rejected = "rejected"
